@@ -1,0 +1,16 @@
+# MANÁ — Biblioteca Digital | Reescrita da API
+RewriteEngine On
+RewriteBase /biblioteca_digital/api/
+
+# Repassa o cabeçalho Authorization ao PHP (necessário em hospedagens compartilhadas)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Tudo que não for arquivo real vai para o roteador
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ index.php?rota=$1 [QSA,L]
+
+# Bloqueia acesso direto ao arquivo de configuração
+<FilesMatch "^config(\.example)?\.php$">
+    Require all denied
+</FilesMatch>

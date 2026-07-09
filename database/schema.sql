@@ -4,6 +4,9 @@
 -- Esquema MySQL (utf8mb4) — compatível com MySQL 5.7+ / MariaDB 10.3+
 -- ============================================================
 
+-- Garante que emojis e acentos sejam gravados corretamente ao importar
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS mana_biblioteca
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE mana_biblioteca;

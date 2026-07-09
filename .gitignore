@@ -1,0 +1,10 @@
+# Dependências e build do frontend
+frontend/node_modules/
+frontend/dist/
+
+# Configuração local com senhas (NUNCA versionar)
+api/config.php
+
+# Diversos
+.DS_Store
+*.log

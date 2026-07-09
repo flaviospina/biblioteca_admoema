@@ -14,8 +14,10 @@ if ($METODO === 'GET' && !$id) {
     $params    = [];
 
     if (!empty($_GET['busca'])) {
-        $where[] = "(l.titulo LIKE :busca OR l.autor LIKE :busca OR l.isbn LIKE :busca OR l.tags LIKE :busca)";
-        $params['busca'] = '%' . $_GET['busca'] . '%';
+        // Placeholders distintos: o PDO sem emulação não permite repetir o mesmo nome
+        $where[] = "(l.titulo LIKE :busca1 OR l.autor LIKE :busca2 OR l.isbn LIKE :busca3 OR l.tags LIKE :busca4)";
+        $b = '%' . $_GET['busca'] . '%';
+        $params += ['busca1' => $b, 'busca2' => $b, 'busca3' => $b, 'busca4' => $b];
     }
     if (!empty($_GET['categoria'])) {
         $where[] = "l.categoria_id = :categoria";

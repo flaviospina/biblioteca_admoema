@@ -29,7 +29,7 @@ CREATE TABLE usuarios (
   ultimo_acesso  DATETIME DEFAULT NULL,
   INDEX idx_usuarios_papel (papel),
   INDEX idx_usuarios_status (status)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- CATEGORIAS DO ACERVO
@@ -38,7 +38,7 @@ CREATE TABLE categorias (
   id     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   nome   VARCHAR(80) NOT NULL UNIQUE,
   cor    VARCHAR(7)  NOT NULL DEFAULT '#1e3a5f'
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- LIVROS (registro bibliográfico)
@@ -69,7 +69,7 @@ CREATE TABLE livros (
   INDEX idx_livros_titulo (titulo),
   INDEX idx_livros_autor (autor),
   FULLTEXT idx_livros_busca (titulo, subtitulo, autor, tags)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- EXEMPLARES (cópias físicas de cada livro)
@@ -86,7 +86,7 @@ CREATE TABLE exemplares (
   observacao         VARCHAR(255) DEFAULT NULL,
   FOREIGN KEY (livro_id) REFERENCES livros(id) ON DELETE CASCADE,
   INDEX idx_exemplares_status (status)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- EMPRÉSTIMOS (circulação de livros físicos)
@@ -108,7 +108,7 @@ CREATE TABLE emprestimos (
   INDEX idx_emprestimos_status (status),
   INDEX idx_emprestimos_usuario (usuario_id),
   INDEX idx_emprestimos_prevista (data_prevista)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- RESERVAS (fila de espera por livro)
@@ -124,7 +124,7 @@ CREATE TABLE reservas (
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   INDEX idx_reservas_status (status),
   INDEX idx_reservas_usuario (usuario_id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- AVALIAÇÕES (notas e comentários dos leitores)
@@ -139,7 +139,7 @@ CREATE TABLE avaliacoes (
   UNIQUE KEY uq_avaliacao (livro_id, usuario_id),
   FOREIGN KEY (livro_id)   REFERENCES livros(id)   ON DELETE CASCADE,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- TRILHAS DE LEITURA (DIFERENCIAL: jornadas de discipulado)
@@ -154,7 +154,7 @@ CREATE TABLE trilhas (
   criado_por INT UNSIGNED DEFAULT NULL,
   criado_em  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (criado_por) REFERENCES usuarios(id) ON DELETE SET NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE trilha_livros (
   id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -164,7 +164,7 @@ CREATE TABLE trilha_livros (
   UNIQUE KEY uq_trilha_livro (trilha_id, livro_id),
   FOREIGN KEY (trilha_id) REFERENCES trilhas(id) ON DELETE CASCADE,
   FOREIGN KEY (livro_id)  REFERENCES livros(id)  ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE trilha_inscricoes (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -175,7 +175,7 @@ CREATE TABLE trilha_inscricoes (
   UNIQUE KEY uq_inscricao (trilha_id, usuario_id),
   FOREIGN KEY (trilha_id)  REFERENCES trilhas(id)  ON DELETE CASCADE,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- CONQUISTAS / SELOS (gamificação da leitura)
@@ -186,7 +186,7 @@ CREATE TABLE conquistas (
   nome      VARCHAR(80) NOT NULL,
   descricao VARCHAR(255) NOT NULL,
   icone     VARCHAR(10) DEFAULT '🏅'
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE usuario_conquistas (
   id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -196,7 +196,7 @@ CREATE TABLE usuario_conquistas (
   UNIQUE KEY uq_usuario_conquista (usuario_id, conquista_id),
   FOREIGN KEY (usuario_id)   REFERENCES usuarios(id)   ON DELETE CASCADE,
   FOREIGN KEY (conquista_id) REFERENCES conquistas(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- SUGESTÕES DE AQUISIÇÃO (membros indicam novos títulos)
@@ -210,7 +210,7 @@ CREATE TABLE sugestoes (
   status     ENUM('pendente','aprovada','recusada','adquirida') NOT NULL DEFAULT 'pendente',
   criado_em  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- NOTIFICAÇÕES (avisos internos: devolução próxima, reserva liberada…)
@@ -225,7 +225,7 @@ CREATE TABLE notificacoes (
   criado_em  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   INDEX idx_notificacoes_usuario (usuario_id, lida)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- AUDITORIA (rastreabilidade de todas as ações administrativas)
@@ -240,7 +240,7 @@ CREATE TABLE auditoria (
   criado_em   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
   INDEX idx_auditoria_entidade (entidade, entidade_id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
 -- CONFIGURAÇÕES DO SISTEMA (parametrização sem alterar código)
@@ -249,7 +249,7 @@ CREATE TABLE configuracoes (
   chave VARCHAR(60) PRIMARY KEY,
   valor VARCHAR(255) NOT NULL,
   descricao VARCHAR(255) DEFAULT NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
 -- DADOS INICIAIS

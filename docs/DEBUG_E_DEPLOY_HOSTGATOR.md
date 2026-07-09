@@ -128,9 +128,14 @@ Objetivo: sistema no ar em **`https://www.admoema.com.br/biblioteca_digital`**.
    banco já existe e tem outro nome).
 4. Clique em **Executar**. Devem aparecer 16 tabelas.
 
-### Passo 3 — Gerar o build do frontend
+### Passo 3 — Build do frontend (já vem pronto!)
 
-No seu computador:
+A pasta **`frontend/dist/`** já está no repositório com o site compilado
+(HTML, CSS, JS e o `.htaccess` das rotas incluídos). **Você não precisa de
+terminal nem de npm** — basta usar essa pasta no próximo passo.
+
+<details>
+<summary>Só se um dia você alterar o código do frontend…</summary>
 
 ```bash
 cd frontend
@@ -138,8 +143,8 @@ npm install
 npm run build
 ```
 
-Isso cria a pasta `frontend/dist/` com o site pronto (HTML, CSS, JS e o
-`.htaccess` das rotas já incluído).
+Isso regenera a `frontend/dist/`, que deve ser reenviada ao servidor.
+</details>
 
 > O sistema já está configurado para o endereço `/biblioteca_digital/`
 > (veja `base` em `frontend/vite.config.js`). Se um dia mudar a pasta,
@@ -208,8 +213,9 @@ return [
 
 ### Passo 7 — Atualizações futuras
 
-- **Mudou o frontend?** `npm run build` e reenvie o conteúdo de `dist/`
-  (não precisa mexer em `api/` nem no banco).
+- **Mudou o frontend?** Gere o build de novo (`npm run build`) ou peça para
+  gerá-lo, e reenvie o conteúdo de `dist/` (não precisa mexer em `api/`
+  nem no banco).
 - **Mudou a API?** Reenvie só os arquivos alterados de `api/`
   (nunca sobrescreva o `config.php` do servidor).
 - **Mudou o banco?** Rode o SQL da alteração no phpMyAdmin.

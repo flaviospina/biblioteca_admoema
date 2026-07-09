@@ -1,6 +1,7 @@
-# Dependências e build do frontend
+# Dependências do frontend
+# (a pasta frontend/dist/ com o build pronto É versionada de propósito,
+#  para permitir publicar na HostGator sem precisar de terminal/npm)
 frontend/node_modules/
-frontend/dist/
 
 # Configuração local com senhas (NUNCA versionar)
 api/config.php

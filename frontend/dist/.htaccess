@@ -1,0 +1,16 @@
+# MANÁ — Biblioteca Digital | Rotas do aplicativo React
+# Este arquivo é copiado automaticamente para a pasta dist/ no build.
+RewriteEngine On
+RewriteBase /biblioteca_digital/
+
+# A API é servida pela pasta real /api (não reescrever)
+RewriteRule ^api/ - [L]
+
+# Qualquer rota que não seja arquivo/pasta real abre o aplicativo
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . index.html [L]
+
+# Força HTTPS (necessário para a câmera do celular funcionar)
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, LOGO_URL } from '../api';
 import { useAuth } from '../AuthContext';
+import { CampoTelefone } from '../componentes/Uteis';
 
 export default function Login() {
   const { entrar } = useAuth();
@@ -62,8 +63,12 @@ export default function Login() {
                 <input id="nome" name="nome" value={form.nome} onChange={mudar} required autoComplete="name" />
               </div>
               <div className="campo">
-                <label htmlFor="telefone">WhatsApp (opcional)</label>
-                <input id="telefone" name="telefone" value={form.telefone} onChange={mudar} placeholder="(11) 9…" autoComplete="tel" />
+                <label htmlFor="telefone">Telefone / WhatsApp (opcional)</label>
+                <CampoTelefone
+                  id="telefone"
+                  value={form.telefone}
+                  onChange={(v) => setForm((f) => ({ ...f, telefone: v, whatsapp: v }))}
+                />
               </div>
             </>
           )}

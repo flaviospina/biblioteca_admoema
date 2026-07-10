@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, formatarData } from '../../api';
 import { useAuth, NOMES_PAPEIS } from '../../AuthContext';
-import { Avatar, Modal, redimensionarFoto, useToast } from '../../componentes/Uteis';
+import { Avatar, CampoTelefone, Modal, redimensionarFoto, useToast } from '../../componentes/Uteis';
 
 function FormUsuario({ usuario, aoFechar, aoSalvar }) {
   const { usuario: eu } = useAuth();
@@ -80,8 +80,8 @@ function FormUsuario({ usuario, aoFechar, aoSalvar }) {
             <input name="email" type="email" value={form.email} onChange={mudar} required />
           </div>
           <div className="campo">
-            <label>WhatsApp</label>
-            <input name="whatsapp" value={form.whatsapp} onChange={mudar} placeholder="(11) 9…" />
+            <label>Telefone / WhatsApp</label>
+            <CampoTelefone value={form.whatsapp} onChange={(v) => setForm((f) => ({ ...f, whatsapp: v }))} />
           </div>
           <div className="campo">
             <label>Nível de acesso</label>

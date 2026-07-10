@@ -47,6 +47,52 @@ export function carregando(titulo, texto = '') {
   return { fechar: () => Swal.close(), atualizar: (t) => Swal.update({ text: t }) };
 }
 
+/**
+ * Modal SweetAlert para escolher entre várias edições/livros encontrados.
+ * Retorna o candidato escolhido ou null se o usuário fechar.
+ */
+export function escolherLivro(candidatos, titulo = 'Encontrei mais de uma opção') {
+  return new Promise((resolver) => {
+    const caixa = document.createElement('div');
+    caixa.className = 'swal-lista-livros';
+    candidatos.forEach((c, i) => {
+      const opcao = document.createElement('button');
+      opcao.type = 'button';
+      opcao.className = 'swal-livro-opcao';
+      const capa = c.capa_url
+        ? `<img src="${c.capa_url}" alt="" onerror="this.style.visibility='hidden'">`
+        : `<span class="sem-capa">📖</span>`;
+      const detalhes = [c.editora, c.ano_publicacao, c.edicao ? `${c.edicao}ª ed.` : '', c.isbn]
+        .filter(Boolean).join(' · ');
+      opcao.innerHTML = `
+        ${capa}
+        <span class="texto">
+          <strong>${c.titulo}</strong>
+          <small>${c.autor || 'Autor não informado'}</small>
+          <small class="detalhes">${detalhes}</small>
+          <small class="fonte">${c.fonte || ''}</small>
+        </span>`;
+      opcao.addEventListener('click', () => {
+        Swal.close();
+        resolver(candidatos[i]);
+      });
+      caixa.appendChild(opcao);
+    });
+
+    Swal.fire({
+      title: titulo,
+      html: caixa,
+      width: 620,
+      showConfirmButton: false,
+      showCancelButton: true,
+      cancelButtonText: 'Nenhum destes',
+      cancelButtonColor: '#8b95ab',
+    }).then((r) => {
+      if (r.dismiss) resolver(null);
+    });
+  });
+}
+
 // Compatibilidade com o restante do app: useToast() devolve a função avisar
 export function ToastProvider({ children }) {
   return children;

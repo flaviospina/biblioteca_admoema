@@ -306,3 +306,22 @@ tbody tr:hover { background: #f8fafd; }
 .item-linha .principal .s { font-size: 0.76rem; color: var(--texto-3); }
 
 .paginacao { display: flex; gap: 6px; justify-content: center; margin-top: 22px; }
+
+/* Lista de opções de livros dentro do SweetAlert */
+.swal-lista-livros { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; text-align: left; }
+.swal-livro-opcao {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 12px; border: 1.5px solid var(--borda); border-radius: var(--raio-sm);
+  background: #fff; cursor: pointer; font: inherit; text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.swal-livro-opcao:hover { border-color: var(--azul-600); background: var(--azul-50); }
+.swal-livro-opcao img, .swal-livro-opcao .sem-capa {
+  width: 46px; height: 66px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+  background: var(--azul-50); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+}
+.swal-livro-opcao .texto { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.swal-livro-opcao .texto strong { font-size: 0.92rem; line-height: 1.25; }
+.swal-livro-opcao .texto small { color: var(--texto-2); font-size: 0.76rem; }
+.swal-livro-opcao .texto .detalhes { color: var(--texto-3); }
+.swal-livro-opcao .texto .fonte { color: var(--dourado-600); font-weight: 600; font-size: 0.68rem; }

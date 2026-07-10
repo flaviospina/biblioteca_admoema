@@ -34,7 +34,7 @@ $METODO  = $_SERVER['REQUEST_METHOD'];
 $recursosValidos = [
     'auth', 'livros', 'categorias', 'exemplares', 'emprestimos', 'reservas',
     'usuarios', 'dashboard', 'trilhas', 'avaliacoes', 'sugestoes',
-    'notificacoes', 'configuracoes', 'auditoria', 'minha-estante',
+    'notificacoes', 'configuracoes', 'auditoria', 'minha-estante', 'isbn',
 ];
 
 if (!in_array($recurso, $recursosValidos, true)) {

@@ -235,7 +235,7 @@ return [
 | Login sempre "sessão expirada" | cabeçalho Authorization não chega ao PHP | O `api/.htaccess` já trata isso; confira se ele subiu para o servidor |
 | Acentos/emojis errados | importação sem utf8mb4 | Reimporte o `schema.sql` (ele contém `SET NAMES utf8mb4`) |
 | Câmera não abre no celular | site sem HTTPS | Ative o SSL grátis da HostGator (cPanel → SSL/TLS Status) |
-| Busca por ISBN não preenche | Google Books/OpenLibrary sem o título | Normal para livros nacionais antigos — preencha manualmente; o formulário continua funcionando |
+| Busca por ISBN não preenche | Nenhum dos 3 catálogos tem o título, ou o Google Books atingiu a cota diária do IP do servidor | Tente a busca por título/autor; para livros nacionais antigos sem registro, preencha manualmente. A cota do Google zera todo dia e as outras fontes continuam funcionando |
 | Site lento no primeiro acesso | cache frio do PHP | Normal em hospedagem compartilhada; os acessos seguintes são rápidos |
 
 ---

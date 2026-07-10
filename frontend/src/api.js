@@ -47,8 +47,39 @@ export async function api(rota, { method = 'GET', body } = {}) {
 }
 
 // ------------------------------------------------------------------
+// Consulta bibliográfica unificada — usa o endpoint do servidor, que
+// pesquisa Google Books + Mercado Editorial (BR) + OpenLibrary e devolve
+// TODAS as edições encontradas. Se o servidor falhar, consulta o
+// Google Books/OpenLibrary direto do navegador (fallback).
+// ------------------------------------------------------------------
+export async function consultarBibliografia({ isbn, titulo, autor }) {
+  const q = new URLSearchParams();
+  if (isbn) q.set('isbn', isbn);
+  if (titulo) q.set('titulo', titulo);
+  if (autor) q.set('autor', autor);
+
+  try {
+    const r = await api(`isbn/consulta?${q}`);
+    if (r.candidatos?.length) return r.candidatos;
+  } catch {
+    // servidor sem internet de saída ou erro — tenta direto do navegador
+  }
+
+  if (isbn) {
+    try {
+      const c = await buscarPorISBN(isbn);
+      return [{ ...c, categorias: [] }];
+    } catch {
+      return [];
+    }
+  }
+  const texto = [titulo, autor].filter(Boolean).join(' ');
+  return (await buscarPorTitulo(texto)).map((c) => ({ ...c, categorias: [] }));
+}
+
+// ------------------------------------------------------------------
 // Busca de dados bibliográficos por ISBN (Google Books → OpenLibrary)
-// Usada pelo cadastro com preenchimento automático (digitado ou via foto).
+// Fallback direto do navegador, usado quando o servidor não responde.
 // ------------------------------------------------------------------
 export async function buscarPorISBN(isbnBruto) {
   const isbn = String(isbnBruto).replace(/[^0-9Xx]/g, '');

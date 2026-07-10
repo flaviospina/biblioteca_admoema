@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { api, buscarPorISBN, buscarPorTitulo } from '../../api';
-import { Capa, Modal, carregando, useToast } from '../../componentes/Uteis';
+import { BarcodeFormat, DecodeHintType } from '@zxing/library';
+import { api, buscarPorTitulo, consultarBibliografia } from '../../api';
+import { carregando, escolherLivro, useToast } from '../../componentes/Uteis';
+
+// Leitura "esforçada": aceita EAN-13, EAN-8, UPC e códigos comuns em livros
+const HINTS = new Map([
+  [DecodeHintType.TRY_HARDER, true],
+  [DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A,
+    BarcodeFormat.UPC_E, BarcodeFormat.CODE_39, BarcodeFormat.CODE_128, BarcodeFormat.ITF,
+  ]],
+]);
 
 const FORM_VAZIO = {
   isbn: '', titulo: '', subtitulo: '', autor: '', editora: '', ano_publicacao: '',
@@ -36,7 +46,6 @@ export default function LivroForm() {
   const fotoRef = useRef(null);
   const fotoModoRef = useRef('codigo'); // 'codigo' | 'capa'
   const [scannerLigado, setScannerLigado] = useState(false);
-  const [candidatos, setCandidatos] = useState(null); // resultados da foto da capa
 
   useEffect(() => {
     api('categorias').then((r) => setCategorias(r.categorias)).catch(() => {});
@@ -59,24 +68,113 @@ export default function LivroForm() {
     setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  // ---------------------------------------------------------- Busca por ISBN
+  // ---------------------------------------------------------- Categoria automática
+  const normalizar = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const mapearCategoria = (categoriasDoLivro) => {
+    const texto = normalizar((categoriasDoLivro || []).join(' '));
+    if (!texto) return '';
+    // 1) o nome de alguma categoria do sistema aparece no texto?
+    for (const c of categorias) {
+      if (texto.includes(normalizar(c.nome))) return c.id;
+    }
+    // 2) palavras-chave (Google Books devolve em inglês; Mercado Editorial em português)
+    const regras = [
+      [/teolog|theolog|doutrin|doctrin|dogmat/, 'teologia'],
+      [/estudo bibl|bible stud|comentari|commentar|hermeneut|exeges/, 'estudo biblico'],
+      [/famil|marria|casament|conjug/, 'familia'],
+      [/infantil|children|juvenile|crianc|kids/, 'infantil'],
+      [/jovem|jovens|adolescen|youth|young adult|teen/, 'jovens e adolescentes'],
+      [/louvor|adorac|worship|music/, 'louvor e adoracao'],
+      [/biografi|biograph|missionar|missio|missao|missoes/, 'biografias e missoes'],
+      [/escola bibl|sunday school|\bebd\b/, 'escola biblica dominical'],
+      [/fiction|romance|literatur|poesia|poetry|novel|conto/, 'literatura geral'],
+      [/religi|christian|crist|espiritual|devocion|gospel|bibli|bible|igreja|church|orac|prayer|\bfe\b|faith|deus|god/, 'vida crista'],
+    ];
+    for (const [re, alvo] of regras) {
+      if (re.test(texto)) {
+        const c = categorias.find((x) => normalizar(x.nome) === alvo);
+        if (c) return c.id;
+      }
+    }
+    return '';
+  };
+
+  // ---------------------------------------------------------- Aplicar candidato escolhido
+  const aplicar = (c, { autoEnviar = false } = {}) => {
+    setForm((f) => {
+      const novo = {
+        ...f,
+        ...Object.fromEntries(
+          Object.entries(c).filter(([k, v]) => k !== 'fonte' && k !== 'categorias' && v !== '' && v != null)
+        ),
+      };
+      if (!novo.categoria_id) {
+        novo.categoria_id = mapearCategoria([...(c.categorias || []), c.titulo, c.subtitulo]);
+      }
+      return novo;
+    });
+    setFonte(c.fonte || 'internet');
+    if (autoEnviar) iniciarContagem();
+  };
+
+  // ---------------------------------------------------------- Busca por ISBN/EAN
   const preencherPorISBN = async (isbn, { autoEnviar = false } = {}) => {
     setBuscando(true);
     setErro('');
+    const janela = carregando('Consultando o código…', `Pesquisando ${isbn} no Google Books, Mercado Editorial e OpenLibrary.`);
     try {
-      const dados = await buscarPorISBN(isbn);
-      setForm((f) => ({
-        ...f,
-        ...Object.fromEntries(Object.entries(dados).filter(([k, v]) => k !== 'fonte' && v !== '' && v != null)),
-      }));
-      setFonte(dados.fonte);
-      avisar(`Dados encontrados no ${dados.fonte}!`);
-      if (autoEnviar) iniciarContagem();
+      const encontrados = await consultarBibliografia({ isbn });
+      janela.fechar();
+      if (encontrados.length === 0) {
+        setErro(`Nenhum livro encontrado para o código ${isbn}. Tente a busca por título/autor ou preencha manualmente.`);
+        setForm((f) => ({ ...f, isbn: String(isbn) }));
+        return;
+      }
+      if (encontrados.length === 1) {
+        aplicar(encontrados[0], { autoEnviar });
+        avisar(`Dados encontrados no ${encontrados[0].fonte}!`);
+        return;
+      }
+      // Mais de uma edição: o usuário escolhe no modal
+      const escolhido = await escolherLivro(encontrados, `${encontrados.length} edições encontradas — qual é a sua?`);
+      if (escolhido) {
+        aplicar(escolhido, { autoEnviar });
+      } else {
+        setForm((f) => ({ ...f, isbn: String(isbn) }));
+      }
     } catch (e) {
+      janela.fechar();
       setErro(e.message);
       setForm((f) => ({ ...f, isbn: String(isbn) }));
     } finally {
       setBuscando(false);
+    }
+  };
+
+  // ---------------------------------------------------------- Busca por título/autor
+  const [buscaTitulo, setBuscaTitulo] = useState('');
+  const [buscaAutor, setBuscaAutor] = useState('');
+  const buscarPorTituloAutor = async () => {
+    if (!buscaTitulo && !buscaAutor) return;
+    setErro('');
+    const janela = carregando('Buscando na internet…', [buscaTitulo, buscaAutor].filter(Boolean).join(' — '));
+    try {
+      const encontrados = await consultarBibliografia({ titulo: buscaTitulo, autor: buscaAutor });
+      janela.fechar();
+      if (encontrados.length === 0) {
+        setErro('Nenhum livro encontrado. Confira a grafia ou preencha o formulário manualmente.');
+        return;
+      }
+      const escolhido = encontrados.length === 1
+        ? encontrados[0]
+        : await escolherLivro(encontrados, `${encontrados.length} livros encontrados — escolha o correto`);
+      if (escolhido) {
+        aplicar(escolhido);
+        avisar(`Formulário preenchido via ${escolhido.fonte}. Revise e cadastre!`);
+      }
+    } catch (e) {
+      janela.fechar();
+      setErro(e.message);
     }
   };
 
@@ -106,9 +204,8 @@ export default function LivroForm() {
   const aoLerCodigo = (resultado) => {
     if (!resultado) return;
     const codigo = resultado.getText().replace(/[^0-9Xx]/g, '');
-    // ISBN-13 começa com 978/979; aceita também ISBN-10
-    if (codigo.length === 13 && !/^97[89]/.test(codigo)) return;
-    if (codigo.length !== 13 && codigo.length !== 10) return;
+    // Aceita ISBN-13, ISBN-10 e qualquer EAN-13 (alguns livros usam EAN próprio)
+    if (codigo.length !== 13 && codigo.length !== 10 && codigo.length !== 8) return;
     pararScanner();
     preencherPorISBN(codigo, { autoEnviar: true });
   };
@@ -117,7 +214,7 @@ export default function LivroForm() {
     setErro('');
     setScannerLigado(true);
     try {
-      leitorRef.current = leitorRef.current || new BrowserMultiFormatReader();
+      leitorRef.current = leitorRef.current || new BrowserMultiFormatReader(HINTS);
       // Aguarda o <video> montar no DOM antes de ligar o stream
       await new Promise((r) => setTimeout(r, 50));
       try {
@@ -161,6 +258,60 @@ export default function LivroForm() {
     fotoRef.current?.click();
   };
 
+  /**
+   * Decodifica o código de barras de uma FOTO com modo "esforçado":
+   * testa a imagem inteira, ampliada, em 4 rotações e recortada na
+   * faixa central — fotos de celular raramente vêm perfeitamente retas.
+   */
+  const decodificarFotoCodigo = async (arquivo) => {
+    const leitor = new BrowserMultiFormatReader(HINTS);
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('Não foi possível abrir a imagem.'));
+      i.src = URL.createObjectURL(arquivo);
+    });
+    try {
+      const variacoes = [];
+      for (const rot of [0, 90, 180, 270]) variacoes.push({ rot, recorte: false });
+      for (const rot of [0, 90]) variacoes.push({ rot, recorte: true });
+
+      for (const { rot, recorte } of variacoes) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const girado = rot === 90 || rot === 270;
+        const maxLado = 1600;
+        const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+        let w = Math.round(img.width * escala);
+        let h = Math.round(img.height * escala);
+        canvas.width = girado ? h : w;
+        canvas.height = girado ? w : h;
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((rot * Math.PI) / 180);
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        ctx.restore();
+
+        if (recorte) {
+          // Mantém apenas a faixa central horizontal (onde o código costuma estar)
+          const faixa = document.createElement('canvas');
+          faixa.width = canvas.width;
+          faixa.height = Math.round(canvas.height * 0.45);
+          faixa.getContext('2d').drawImage(
+            canvas, 0, Math.round(canvas.height * 0.275), canvas.width, faixa.height,
+            0, 0, faixa.width, faixa.height
+          );
+          try { return (await leitor.decodeFromCanvas(faixa)).getText(); } catch { /* próxima variação */ }
+        } else {
+          try { return (await leitor.decodeFromCanvas(canvas)).getText(); } catch { /* próxima variação */ }
+        }
+      }
+      throw new Error('Código de barras não encontrado na foto.');
+    } finally {
+      URL.revokeObjectURL(img.src);
+    }
+  };
+
   const lerFoto = async (e) => {
     const arquivo = e.target.files?.[0];
     e.target.value = '';
@@ -173,20 +324,18 @@ export default function LivroForm() {
       return;
     }
 
-    // Modo código de barras: tenta ler o ISBN; se não achar, cai para a capa
-    setBuscando(true);
-    const url = URL.createObjectURL(arquivo);
+    // Modo código de barras: leitura reforçada; se não achar, cai para a capa
+    const janela = carregando('Lendo o código de barras da foto…');
     try {
-      leitorRef.current = leitorRef.current || new BrowserMultiFormatReader();
-      const resultado = await leitorRef.current.decodeFromImageUrl(url);
-      const codigo = resultado.getText().replace(/[^0-9Xx]/g, '');
+      const texto = await decodificarFotoCodigo(arquivo);
+      const codigo = texto.replace(/[^0-9Xx]/g, '');
+      janela.fechar();
+      if (codigo.length < 8) throw new Error('Código ilegível.');
       await preencherPorISBN(codigo, { autoEnviar: true });
     } catch {
-      setBuscando(false);
-      avisar('Nenhum código de barras na foto — tentando reconhecer a capa…', 'ok');
+      janela.fechar();
+      await avisar('Nenhum código de barras legível na foto — vou tentar reconhecer a capa…', 'ok');
       await lerFotoDaCapa(arquivo);
-    } finally {
-      URL.revokeObjectURL(url);
     }
   };
 
@@ -214,28 +363,24 @@ export default function LivroForm() {
       }
 
       janela.atualizar('Consultando a internet…');
-      const resultados = await buscarPorTitulo(palavras.join(' '));
+      let resultados = await consultarBibliografia({ titulo: palavras.join(' ') });
+      if (resultados.length === 0) {
+        resultados = (await buscarPorTitulo(palavras.join(' '))).map((c) => ({ ...c, categorias: [] }));
+      }
       janela.fechar();
 
       if (resultados.length === 0) {
         setErro(`Nenhum livro encontrado para "${palavras.join(' ')}". Tente a foto do código de barras ou digite o ISBN.`);
         return;
       }
-      setCandidatos(resultados);
+      const escolhido = resultados.length === 1
+        ? resultados[0]
+        : await escolherLivro(resultados, 'Qual destes é o livro da foto?');
+      if (escolhido) aplicar(escolhido, { autoEnviar: true });
     } catch (e) {
       janela.fechar();
       setErro(e.message || 'Não foi possível reconhecer a capa. Tente o código de barras ou digite o ISBN.');
     }
-  };
-
-  const aplicarCandidato = (c) => {
-    setCandidatos(null);
-    setForm((f) => ({
-      ...f,
-      ...Object.fromEntries(Object.entries(c).filter(([, v]) => v !== '' && v != null)),
-    }));
-    setFonte('Google Books (foto da capa)');
-    iniciarContagem();
   };
 
   // ---------------------------------------------------------- Salvar
@@ -274,7 +419,7 @@ export default function LivroForm() {
           <p>
             {editando
               ? 'Ajuste os dados bibliográficos do título.'
-              : 'Digite o ISBN, aponte a câmera para o código de barras ou envie uma foto — o formulário se preenche e envia sozinho.'}
+              : 'Digite o ISBN/EAN, busque por título/autor ou use a câmera — o sistema consulta 3 catálogos na internet e preenche o formulário sozinho.'}
           </p>
         </div>
         <Link to="/admin/livros" className="botao secundario">← Acervo</Link>
@@ -282,9 +427,12 @@ export default function LivroForm() {
 
       {!editando && (
         <div className="card" style={{ marginBottom: 18 }}>
-          <div className="abas" style={{ maxWidth: 420 }}>
+          <div className="abas" style={{ maxWidth: 560 }}>
             <button type="button" className={modo === 'digitar' ? 'ativa' : ''} onClick={() => { setModo('digitar'); pararScanner(); }}>
-              ⌨️ Digitar ISBN
+              ⌨️ ISBN / EAN
+            </button>
+            <button type="button" className={modo === 'buscar' ? 'ativa' : ''} onClick={() => { setModo('buscar'); pararScanner(); }}>
+              🔎 Título / Autor
             </button>
             <button type="button" className={modo === 'camera' ? 'ativa' : ''} onClick={() => setModo('camera')}>
               📷 Usar câmera
@@ -298,7 +446,7 @@ export default function LivroForm() {
             >
               <input
                 style={{ flex: '1 1 220px', padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
-                placeholder="Digite qualquer ISBN (10 ou 13 dígitos)…"
+                placeholder="Digite o ISBN ou EAN (10 ou 13 dígitos)…"
                 name="isbn"
                 value={form.isbn}
                 onChange={mudar}
@@ -306,6 +454,29 @@ export default function LivroForm() {
               />
               <button className="botao dourado" disabled={buscando || !form.isbn}>
                 {buscando ? 'Consultando…' : '🔎 Buscar dados na internet'}
+              </button>
+            </form>
+          )}
+
+          {modo === 'buscar' && (
+            <form
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+              onSubmit={(e) => { e.preventDefault(); buscarPorTituloAutor(); }}
+            >
+              <input
+                style={{ flex: '2 1 220px', padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
+                placeholder="Nome do livro…"
+                value={buscaTitulo}
+                onChange={(e) => setBuscaTitulo(e.target.value)}
+              />
+              <input
+                style={{ flex: '1 1 180px', padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
+                placeholder="Autor (opcional)…"
+                value={buscaAutor}
+                onChange={(e) => setBuscaAutor(e.target.value)}
+              />
+              <button className="botao dourado" disabled={!buscaTitulo && !buscaAutor}>
+                🔎 Buscar na internet
               </button>
             </form>
           )}
@@ -455,32 +626,6 @@ export default function LivroForm() {
           {salvando ? 'Salvando…' : editando ? 'Salvar alterações' : '✚ Cadastrar no acervo'}
         </button>
       </form>
-
-      {candidatos && (
-        <Modal titulo="Qual destes é o livro?" aoFechar={() => setCandidatos(null)}>
-          <p style={{ color: 'var(--texto-2)', fontSize: '0.86rem', marginTop: -6 }}>
-            Encontrei estes títulos a partir da foto da capa. Toque no correto para preencher o formulário.
-          </p>
-          <div className="lista-simples">
-            {candidatos.map((c, i) => (
-              <button
-                key={i}
-                type="button"
-                className="item-linha"
-                style={{ cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
-                onClick={() => aplicarCandidato(c)}
-              >
-                <Capa url={c.capa_url} titulo={c.titulo} />
-                <div className="principal">
-                  <div className="t">{c.titulo}</div>
-                  <div className="s">{c.autor}{c.editora ? ` · ${c.editora}` : ''}{c.ano_publicacao ? ` · ${c.ano_publicacao}` : ''}</div>
-                </div>
-                <span className="chip">usar</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
     </>
   );
 }

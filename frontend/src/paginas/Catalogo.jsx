@@ -35,8 +35,15 @@ export default function Catalogo() {
     const novo = new URLSearchParams(parametros);
     Object.entries(mudancas).forEach(([k, v]) => (v ? novo.set(k, v) : novo.delete(k)));
     if (!('pagina' in mudancas)) novo.delete('pagina');
-    setParametros(novo);
+    setParametros(novo, { replace: true });
   };
+
+  // Busca sensitiva: filtra automaticamente enquanto o usuário digita
+  useEffect(() => {
+    if (busca === (parametros.get('busca') || '')) return;
+    const t = setTimeout(() => atualizarFiltro({ busca }), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   return (
     <>
@@ -54,12 +61,11 @@ export default function Catalogo() {
         >
           <input
             style={{ flex: 1, padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
-            placeholder="Buscar por título, autor, ISBN ou tema…"
+            placeholder="Digite para filtrar por título, autor, ISBN ou tema…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             aria-label="Buscar no acervo"
           />
-          <button className="botao">Buscar</button>
         </form>
         <select
           value={categoria}

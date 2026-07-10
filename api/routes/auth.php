@@ -82,6 +82,15 @@ if ($METODO === 'PUT' && $acao === 'perfil') {
     responder(200, ['ok' => true]);
 }
 
+// POST /api/auth/foto — o próprio usuário envia/troca sua foto de rosto
+if ($METODO === 'POST' && $acao === 'foto') {
+    $u = exigir_login();
+    $dados = entrada();
+    $url = salvar_foto_usuario((int)$u['id'], $dados['imagem'] ?? '');
+    auditar($u['id'], 'foto_atualizada', 'usuarios', $u['id']);
+    responder(200, ['foto_url' => $url]);
+}
+
 // PUT /api/auth/senha
 if ($METODO === 'PUT' && $acao === 'senha') {
     $u = exigir_login();

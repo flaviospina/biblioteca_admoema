@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatarData } from '../api';
-import { Capa, Estrelas, useToast } from '../componentes/Uteis';
+import { Capa, Estrelas, confirmar, useToast } from '../componentes/Uteis';
 
 export default function MinhaEstante() {
   const avisar = useToast();
@@ -23,6 +23,7 @@ export default function MinhaEstante() {
   };
 
   const cancelarReserva = async (id) => {
+    if (!(await confirmar('Cancelar esta reserva?', 'Você perderá sua posição na fila.', 'Sim, cancelar'))) return;
     try {
       await api(`reservas/${id}`, { method: 'DELETE' });
       avisar('Reserva cancelada.');

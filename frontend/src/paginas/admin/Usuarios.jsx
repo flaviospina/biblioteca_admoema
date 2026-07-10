@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, formatarData } from '../../api';
 import { useAuth, NOMES_PAPEIS } from '../../AuthContext';
-import { Modal, useToast } from '../../componentes/Uteis';
+import { Avatar, Modal, redimensionarFoto, useToast } from '../../componentes/Uteis';
 
 function FormUsuario({ usuario, aoFechar, aoSalvar }) {
   const { usuario: eu } = useAuth();
@@ -17,9 +17,23 @@ function FormUsuario({ usuario, aoFechar, aoSalvar }) {
     status: usuario?.status || 'ativo',
     senha: '',
     nova_senha: '',
+    foto: '', // data-URL da nova foto de rosto (opcional)
   });
+  const fotoRef = useRef(null);
 
   const mudar = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const escolherFoto = async (e) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    try {
+      const foto = await redimensionarFoto(arquivo);
+      setForm((f) => ({ ...f, foto }));
+    } catch (err) {
+      avisar(err.message, 'erro');
+    }
+  };
 
   const papeisPermitidos = eu.papel === 'admin'
     ? ['usuario', 'bibliotecario', 'gerente', 'admin']
@@ -42,6 +56,20 @@ function FormUsuario({ usuario, aoFechar, aoSalvar }) {
   return (
     <Modal titulo={editando ? `Editar ${usuario.nome}` : 'Novo usuário'} aoFechar={aoFechar}>
       <form onSubmit={salvar}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+          {form.foto
+            ? <img src={form.foto} alt="Nova foto" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--borda)' }} />
+            : <Avatar url={usuario?.foto_url} nome={form.nome || usuario?.nome} tamanho={64} />}
+          <div>
+            <button type="button" className="botao secundario pequeno" onClick={() => fotoRef.current?.click()}>
+              📸 {form.foto || usuario?.foto_url ? 'Trocar foto de rosto' : 'Adicionar foto de rosto'}
+            </button>
+            <input ref={fotoRef} type="file" accept="image/*" capture="user" hidden onChange={escolherFoto} />
+            <div style={{ fontSize: '0.72rem', color: 'var(--texto-3)', marginTop: 4 }}>
+              Pode tirar na hora com a câmera ou escolher da galeria.
+            </div>
+          </div>
+        </div>
         <div className="grade-form">
           <div className="campo" style={{ gridColumn: '1 / -1' }}>
             <label>Nome completo</label>
@@ -146,8 +174,13 @@ export default function Usuarios() {
             {usuarios.map((u) => (
               <tr key={u.id}>
                 <td>
-                  <strong>{u.nome}</strong>
-                  <div style={{ fontSize: '0.74rem', color: 'var(--texto-3)' }}>{u.congregacao}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Avatar url={u.foto_url} nome={u.nome} />
+                    <div>
+                      <strong>{u.nome}</strong>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--texto-3)' }}>{u.congregacao}</div>
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <div style={{ fontSize: '0.8rem' }}>{u.email}</div>

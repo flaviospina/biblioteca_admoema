@@ -45,10 +45,18 @@ export function AuthProvider({ children }) {
     setUsuario(null);
   };
 
+  const atualizarUsuario = (parcial) => {
+    setUsuario((u) => {
+      const novo = { ...u, ...parcial };
+      localStorage.setItem('mana_usuario', JSON.stringify(novo));
+      return novo;
+    });
+  };
+
   const temPapel = (minimo) => usuario && NIVEIS[usuario.papel] >= NIVEIS[minimo];
 
   return (
-    <AuthContext.Provider value={{ usuario, carregando, entrar, sair, temPapel }}>
+    <AuthContext.Provider value={{ usuario, carregando, entrar, sair, temPapel, atualizarUsuario }}>
       {children}
     </AuthContext.Provider>
   );

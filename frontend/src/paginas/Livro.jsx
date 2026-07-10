@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, formatarData } from '../api';
 import { useAuth } from '../AuthContext';
-import { Capa, Estrelas, SeloDisponibilidade, useToast } from '../componentes/Uteis';
+import { Capa, Estrelas, SeloDisponibilidade, confirmar, useToast } from '../componentes/Uteis';
 
 export default function Livro() {
   const { id } = useParams();
@@ -43,6 +43,7 @@ export default function Livro() {
   };
 
   const cancelarReserva = async () => {
+    if (!(await confirmar('Cancelar sua reserva?', 'Você perderá sua posição na fila.', 'Sim, cancelar'))) return;
     try {
       await api(`reservas/${livro.minha_reserva.id}`, { method: 'DELETE' });
       avisar('Reserva cancelada.');

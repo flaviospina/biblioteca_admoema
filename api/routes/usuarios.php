@@ -19,7 +19,7 @@ if ($METODO === 'GET' && !$id) {
     }
     $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
     $stmt = db()->prepare(
-        "SELECT id, nome, email, telefone, whatsapp, papel, congregacao, status, criado_em, ultimo_acesso,
+        "SELECT id, nome, email, telefone, whatsapp, papel, congregacao, status, foto_url, criado_em, ultimo_acesso,
            (SELECT COUNT(*) FROM emprestimos e WHERE e.usuario_id = usuarios.id AND e.status IN ('ativo','atrasado')) AS emprestimos_ativos,
            (SELECT COUNT(*) FROM emprestimos e WHERE e.usuario_id = usuarios.id AND e.status = 'atrasado') AS atrasos
          FROM usuarios $sqlWhere ORDER BY nome LIMIT 500");
@@ -57,6 +57,9 @@ if ($METODO === 'POST' && !$id) {
         $dados['congregacao'] ?? 'Setor 124 - Moema',
     ]);
     $novoId = (int)db()->lastInsertId();
+    if (!empty($dados['foto'])) {
+        salvar_foto_usuario($novoId, $dados['foto']);
+    }
     auditar($u['id'], 'usuario_criado', 'usuarios', $novoId, "{$dados['nome']} ($papel)");
     responder(201, ['id' => $novoId]);
 }
@@ -103,6 +106,10 @@ if ($METODO === 'PUT' && $id) {
         if (strlen($dados['nova_senha']) < 6) responder(422, ['erro' => 'Senha deve ter ao menos 6 caracteres.']);
         db()->prepare("UPDATE usuarios SET senha_hash = ? WHERE id = ?")
             ->execute([password_hash($dados['nova_senha'], PASSWORD_BCRYPT), $id]);
+    }
+
+    if (!empty($dados['foto'])) {
+        salvar_foto_usuario($id, $dados['foto']);
     }
 
     auditar($u['id'], 'usuario_editado', 'usuarios', $id, "Papel: $novoPapel, Status: " . ($dados['status'] ?? $alvo['status']));

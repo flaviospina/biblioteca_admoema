@@ -103,6 +103,37 @@ export async function buscarPorISBN(isbnBruto) {
   };
 }
 
+// ------------------------------------------------------------------
+// Busca por texto (usada pela foto da capa, após o OCR): devolve uma
+// lista de candidatos do Google Books para o usuário confirmar.
+// ------------------------------------------------------------------
+export async function buscarPorTitulo(texto) {
+  const consulta = encodeURIComponent(texto.trim());
+  if (!consulta) return [];
+  const r = await fetch(
+    `https://www.googleapis.com/books/v1/volumes?q=${consulta}&maxResults=6&printType=books`
+  );
+  const j = await r.json();
+  return (j?.items || []).map((item) => {
+    const v = item.volumeInfo || {};
+    const isbn = (v.industryIdentifiers || []).find((i) => i.type === 'ISBN_13')?.identifier
+      || (v.industryIdentifiers || []).find((i) => i.type === 'ISBN_10')?.identifier
+      || '';
+    return {
+      isbn,
+      titulo: v.title || '',
+      subtitulo: v.subtitle || '',
+      autor: (v.authors || []).join(', '),
+      editora: v.publisher || '',
+      ano_publicacao: v.publishedDate ? parseInt(v.publishedDate.slice(0, 4), 10) : '',
+      paginas: v.pageCount || '',
+      idioma: v.language === 'pt' ? 'Português' : v.language === 'en' ? 'Inglês' : v.language === 'es' ? 'Espanhol' : (v.language || 'Português'),
+      sinopse: v.description || '',
+      capa_url: v.imageLinks?.thumbnail?.replace('http://', 'https://') || '',
+    };
+  }).filter((c) => c.titulo);
+}
+
 export const formatarData = (d) => {
   if (!d) return '—';
   const data = new Date(String(d).replace(' ', 'T'));

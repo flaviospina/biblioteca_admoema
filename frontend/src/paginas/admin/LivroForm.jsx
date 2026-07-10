@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { api, buscarPorISBN } from '../../api';
-import { useToast } from '../../componentes/Uteis';
+import { api, buscarPorISBN, buscarPorTitulo } from '../../api';
+import { Capa, Modal, carregando, useToast } from '../../componentes/Uteis';
 
 const FORM_VAZIO = {
   isbn: '', titulo: '', subtitulo: '', autor: '', editora: '', ano_publicacao: '',
@@ -34,7 +34,9 @@ export default function LivroForm() {
   const leitorRef = useRef(null);
   const controlesRef = useRef(null);
   const fotoRef = useRef(null);
+  const fotoModoRef = useRef('codigo'); // 'codigo' | 'capa'
   const [scannerLigado, setScannerLigado] = useState(false);
+  const [candidatos, setCandidatos] = useState(null); // resultados da foto da capa
 
   useEffect(() => {
     api('categorias').then((r) => setCategorias(r.categorias)).catch(() => {});
@@ -101,25 +103,43 @@ export default function LivroForm() {
   };
 
   // ---------------------------------------------------------- Scanner (câmera ao vivo)
+  const aoLerCodigo = (resultado) => {
+    if (!resultado) return;
+    const codigo = resultado.getText().replace(/[^0-9Xx]/g, '');
+    // ISBN-13 começa com 978/979; aceita também ISBN-10
+    if (codigo.length === 13 && !/^97[89]/.test(codigo)) return;
+    if (codigo.length !== 13 && codigo.length !== 10) return;
+    pararScanner();
+    preencherPorISBN(codigo, { autoEnviar: true });
+  };
+
   const ligarScanner = async () => {
     setErro('');
+    setScannerLigado(true);
     try {
       leitorRef.current = leitorRef.current || new BrowserMultiFormatReader();
-      setScannerLigado(true);
-      controlesRef.current = await leitorRef.current.decodeFromVideoDevice(
-        undefined, // câmera padrão (traseira no celular)
-        videoRef.current,
-        (resultado) => {
-          if (!resultado) return;
-          const codigo = resultado.getText().replace(/[^0-9Xx]/g, '');
-          // ISBN-13 começa com 978/979; aceita também ISBN-10
-          if (codigo.length === 13 && !/^97[89]/.test(codigo)) return;
-          if (codigo.length !== 13 && codigo.length !== 10) return;
-          pararScanner();
-          avisar(`Código de barras lido: ${codigo}`);
-          preencherPorISBN(codigo, { autoEnviar: true });
-        }
-      );
+      // Aguarda o <video> montar no DOM antes de ligar o stream
+      await new Promise((r) => setTimeout(r, 50));
+      try {
+        // 1ª tentativa: câmera traseira do celular, em boa resolução
+        controlesRef.current = await leitorRef.current.decodeFromConstraints(
+          {
+            audio: false,
+            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          },
+          videoRef.current,
+          aoLerCodigo
+        );
+      } catch {
+        // 2ª tentativa: qualquer câmera disponível (notebooks, tablets…)
+        controlesRef.current = await leitorRef.current.decodeFromConstraints(
+          { audio: false, video: true },
+          videoRef.current,
+          aoLerCodigo
+        );
+      }
+      // Alguns navegadores (iOS/Android antigos) não iniciam o vídeo sozinhos
+      await videoRef.current?.play?.().catch(() => {});
     } catch (e) {
       setScannerLigado(false);
       setErro(
@@ -136,25 +156,86 @@ export default function LivroForm() {
   };
 
   // ---------------------------------------------------------- Foto tirada com o celular
+  const abrirFoto = (modo) => {
+    fotoModoRef.current = modo;
+    fotoRef.current?.click();
+  };
+
   const lerFoto = async (e) => {
     const arquivo = e.target.files?.[0];
     e.target.value = '';
     if (!arquivo) return;
     setErro('');
+    pararScanner();
+
+    if (fotoModoRef.current === 'capa') {
+      await lerFotoDaCapa(arquivo);
+      return;
+    }
+
+    // Modo código de barras: tenta ler o ISBN; se não achar, cai para a capa
     setBuscando(true);
     const url = URL.createObjectURL(arquivo);
     try {
       leitorRef.current = leitorRef.current || new BrowserMultiFormatReader();
       const resultado = await leitorRef.current.decodeFromImageUrl(url);
       const codigo = resultado.getText().replace(/[^0-9Xx]/g, '');
-      avisar(`Código de barras lido da foto: ${codigo}`);
       await preencherPorISBN(codigo, { autoEnviar: true });
     } catch {
       setBuscando(false);
-      setErro('Não foi possível ler o código de barras na foto. Tente aproximar mais, com boa iluminação, ou digite o ISBN.');
+      avisar('Nenhum código de barras na foto — tentando reconhecer a capa…', 'ok');
+      await lerFotoDaCapa(arquivo);
     } finally {
       URL.revokeObjectURL(url);
     }
+  };
+
+  // ---------------------------------------------------------- Foto da CAPA (OCR + busca)
+  const lerFotoDaCapa = async (arquivo) => {
+    const janela = carregando('Lendo a capa do livro…', 'Preparando o reconhecimento de texto (a primeira vez demora um pouco mais).');
+    try {
+      const { default: Tesseract } = await import('tesseract.js');
+      const { data } = await Tesseract.recognize(arquivo, 'por', {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            janela.atualizar(`Reconhecendo o texto da capa… ${Math.round(m.progress * 100)}%`);
+          }
+        },
+      });
+
+      // Extrai as palavras mais prováveis do título (ignora ruído do OCR)
+      const palavras = (data.text || '')
+        .split(/\s+/)
+        .map((p) => p.replace(/[^\p{L}\p{N}'-]/gu, ''))
+        .filter((p) => p.length >= 3)
+        .slice(0, 10);
+      if (palavras.length === 0) {
+        throw new Error('Não consegui ler texto na capa. Tente uma foto mais próxima, reta e bem iluminada.');
+      }
+
+      janela.atualizar('Consultando a internet…');
+      const resultados = await buscarPorTitulo(palavras.join(' '));
+      janela.fechar();
+
+      if (resultados.length === 0) {
+        setErro(`Nenhum livro encontrado para "${palavras.join(' ')}". Tente a foto do código de barras ou digite o ISBN.`);
+        return;
+      }
+      setCandidatos(resultados);
+    } catch (e) {
+      janela.fechar();
+      setErro(e.message || 'Não foi possível reconhecer a capa. Tente o código de barras ou digite o ISBN.');
+    }
+  };
+
+  const aplicarCandidato = (c) => {
+    setCandidatos(null);
+    setForm((f) => ({
+      ...f,
+      ...Object.fromEntries(Object.entries(c).filter(([, v]) => v !== '' && v != null)),
+    }));
+    setFonte('Google Books (foto da capa)');
+    iniciarContagem();
   };
 
   // ---------------------------------------------------------- Salvar
@@ -234,7 +315,7 @@ export default function LivroForm() {
               {scannerLigado ? (
                 <>
                   <div className="scanner-moldura">
-                    <video ref={videoRef} className="scanner-video" muted playsInline />
+                    <video ref={videoRef} className="scanner-video" muted autoPlay playsInline />
                   </div>
                   <p style={{ fontSize: '0.82rem', color: 'var(--texto-2)' }}>
                     Aponte para o código de barras do ISBN (atrás do livro). A leitura é automática.
@@ -243,9 +324,12 @@ export default function LivroForm() {
                 </>
               ) : (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button type="button" className="botao dourado" onClick={ligarScanner}>📷 Ligar câmera e escanear</button>
-                  <button type="button" className="botao secundario" onClick={() => fotoRef.current?.click()} disabled={buscando}>
-                    {buscando ? 'Lendo foto…' : '🖼️ Tirar/enviar foto do código'}
+                  <button type="button" className="botao dourado" onClick={ligarScanner}>📷 Escanear código ao vivo</button>
+                  <button type="button" className="botao secundario" onClick={() => abrirFoto('codigo')} disabled={buscando}>
+                    {buscando ? 'Lendo foto…' : '🏷️ Foto do código de barras'}
+                  </button>
+                  <button type="button" className="botao secundario" onClick={() => abrirFoto('capa')} disabled={buscando}>
+                    🖼️ Foto da capa do livro
                   </button>
                   <input ref={fotoRef} type="file" accept="image/*" capture="environment" hidden onChange={lerFoto} />
                 </div>
@@ -371,6 +455,32 @@ export default function LivroForm() {
           {salvando ? 'Salvando…' : editando ? 'Salvar alterações' : '✚ Cadastrar no acervo'}
         </button>
       </form>
+
+      {candidatos && (
+        <Modal titulo="Qual destes é o livro?" aoFechar={() => setCandidatos(null)}>
+          <p style={{ color: 'var(--texto-2)', fontSize: '0.86rem', marginTop: -6 }}>
+            Encontrei estes títulos a partir da foto da capa. Toque no correto para preencher o formulário.
+          </p>
+          <div className="lista-simples">
+            {candidatos.map((c, i) => (
+              <button
+                key={i}
+                type="button"
+                className="item-linha"
+                style={{ cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+                onClick={() => aplicarCandidato(c)}
+              >
+                <Capa url={c.capa_url} titulo={c.titulo} />
+                <div className="principal">
+                  <div className="t">{c.titulo}</div>
+                  <div className="s">{c.autor}{c.editora ? ` · ${c.editora}` : ''}{c.ano_publicacao ? ` · ${c.ano_publicacao}` : ''}</div>
+                </div>
+                <span className="chip">usar</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

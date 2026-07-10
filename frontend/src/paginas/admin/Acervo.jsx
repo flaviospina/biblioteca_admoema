@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../AuthContext';
-import { Capa, useToast } from '../../componentes/Uteis';
+import { Capa, confirmar, useToast } from '../../componentes/Uteis';
 
 export default function Acervo() {
   const { temPapel } = useAuth();
@@ -16,10 +16,14 @@ export default function Acervo() {
     if (busca) q.set('busca', busca);
     api(`livros?${q}`).then(setDados).catch(() => {});
   };
-  useEffect(() => { carregar(); }, [pagina]);
+  // Busca sensitiva: filtra automaticamente enquanto digita
+  useEffect(() => {
+    const t = setTimeout(carregar, 350);
+    return () => clearTimeout(t);
+  }, [pagina, busca]);
 
   const excluir = async (l) => {
-    if (!window.confirm(`Excluir "${l.titulo}" e todos os seus exemplares? Esta ação não pode ser desfeita.`)) return;
+    if (!(await confirmar(`Excluir "${l.titulo}"?`, 'Todos os exemplares deste título serão removidos. Esta ação não pode ser desfeita.', 'Sim, excluir'))) return;
     try {
       await api(`livros/${l.id}`, { method: 'DELETE' });
       avisar('Livro excluído.');
@@ -39,19 +43,14 @@ export default function Acervo() {
         <Link to="/admin/livros/novo" className="botao">📷 Cadastrar livro</Link>
       </div>
 
-      <form
-        className="card"
-        style={{ marginBottom: 16, display: 'flex', gap: 8 }}
-        onSubmit={(e) => { e.preventDefault(); setPagina(1); carregar(); }}
-      >
+      <div className="card" style={{ marginBottom: 16 }}>
         <input
-          style={{ flex: 1, padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
-          placeholder="Buscar por título, autor ou ISBN…"
+          style={{ width: '100%', padding: '10px 13px', border: '1.5px solid var(--borda)', borderRadius: 10, font: 'inherit' }}
+          placeholder="Digite para filtrar por título, autor ou ISBN…"
           value={busca}
-          onChange={(e) => setBusca(e.target.value)}
+          onChange={(e) => { setBusca(e.target.value); setPagina(1); }}
         />
-        <button className="botao">Buscar</button>
-      </form>
+      </div>
 
       <div className="tabela-wrap">
         <table>

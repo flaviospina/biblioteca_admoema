@@ -152,6 +152,44 @@ function conceder_conquista(int $usuarioId, string $codigo): void
     }
 }
 
+// ---------------------------------------------------------------- Foto de perfil
+/**
+ * Recebe uma imagem em data-URL (base64), valida, grava em api/uploads/
+ * e atualiza o foto_url do usuário. Retorna o caminho relativo salvo.
+ */
+function salvar_foto_usuario(int $usuarioId, string $dataUrl): string
+{
+    if (!preg_match('#^data:image/(jpeg|jpg|png|webp);base64,#i', $dataUrl, $m)) {
+        responder(422, ['erro' => 'Envie a foto em formato JPEG, PNG ou WebP.']);
+    }
+    $binario = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1), true);
+    if ($binario === false || strlen($binario) > 3 * 1024 * 1024) {
+        responder(422, ['erro' => 'Imagem inválida ou maior que 3 MB.']);
+    }
+    if (@getimagesizefromstring($binario) === false) {
+        responder(422, ['erro' => 'O arquivo enviado não é uma imagem válida.']);
+    }
+
+    $dir = __DIR__ . '/../uploads';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        responder(500, ['erro' => 'Não foi possível criar a pasta de uploads no servidor.']);
+    }
+
+    // Remove fotos antigas do mesmo usuário e grava a nova (nome com carimbo p/ evitar cache)
+    foreach (glob("$dir/usuario_{$usuarioId}_*") ?: [] as $antiga) {
+        @unlink($antiga);
+    }
+    $ext  = strtolower($m[1]) === 'png' ? 'png' : (strtolower($m[1]) === 'webp' ? 'webp' : 'jpg');
+    $nome = "usuario_{$usuarioId}_" . time() . ".$ext";
+    if (file_put_contents("$dir/$nome", $binario) === false) {
+        responder(500, ['erro' => 'Falha ao gravar a foto no servidor (permissão da pasta uploads).']);
+    }
+
+    $url = "api/uploads/$nome";
+    db()->prepare("UPDATE usuarios SET foto_url = ? WHERE id = ?")->execute([$url, $usuarioId]);
+    return $url;
+}
+
 // ---------------------------------------------------------------- Configurações do sistema
 function config_sistema(string $chave, string $padrao = ''): string
 {

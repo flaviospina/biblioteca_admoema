@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, formatarData } from '../../api';
-import { Modal, useToast } from '../../componentes/Uteis';
+import { Modal, confirmar, useToast } from '../../componentes/Uteis';
 
 /* ---------------- Novo empréstimo (balcão) ---------------- */
 function NovoEmprestimo({ aoFechar, aoCriar }) {
@@ -146,6 +146,7 @@ export default function Circulacao() {
   useEffect(() => { carregar(); }, [filtro]);
 
   const devolver = async (e) => {
+    if (!(await confirmar('Registrar devolução?', `"${e.titulo}" — ${e.usuario_nome}`, 'Sim, devolver'))) return;
     try {
       const r = await api(`emprestimos/${e.id}/devolver`, { method: 'POST' });
       avisar(
@@ -170,7 +171,7 @@ export default function Circulacao() {
   };
 
   const cancelarReserva = async (r) => {
-    if (!window.confirm(`Cancelar a reserva de "${r.titulo}" de ${r.usuario_nome}?`)) return;
+    if (!(await confirmar('Cancelar esta reserva?', `"${r.titulo}" — ${r.usuario_nome}`, 'Sim, cancelar'))) return;
     try {
       await api(`reservas/${r.id}`, { method: 'DELETE' });
       avisar('Reserva cancelada.');

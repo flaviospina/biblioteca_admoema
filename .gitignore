@@ -6,6 +6,10 @@ frontend/node_modules/
 # Configuração local com senhas (NUNCA versionar)
 api/config.php
 
+# Fotos enviadas pelos usuários (ficam só no servidor)
+api/uploads/*
+!api/uploads/.htaccess
+
 # Diversos
 .DS_Store
 *.log

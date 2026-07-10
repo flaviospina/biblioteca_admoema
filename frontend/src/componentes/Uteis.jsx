@@ -1,24 +1,59 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { useState } from 'react';
+import Swal from 'sweetalert2';
 
-// ------------------------------------------------------- Toast global
-const ToastContext = createContext(() => {});
+// ------------------------------------------------------- SweetAlert (janelas modais)
+const swal = Swal.mixin({
+  confirmButtonColor: '#2563eb',
+  cancelButtonColor: '#8b95ab',
+  confirmButtonText: 'OK',
+});
 
-export function ToastProvider({ children }) {
-  const [toast, setToast] = useState(null);
-  const avisar = useCallback((mensagem, tipo = 'ok') => {
-    setToast({ mensagem, tipo });
-    setTimeout(() => setToast(null), 3800);
-  }, []);
-  return (
-    <ToastContext.Provider value={avisar}>
-      {children}
-      {toast && <div className={`toast ${toast.tipo === 'erro' ? 'erro' : ''}`}>{toast.mensagem}</div>}
-    </ToastContext.Provider>
-  );
+/** Modal de resultado de operação: sucesso fecha sozinho, erro pede OK. */
+export function avisar(mensagem, tipo = 'ok') {
+  if (tipo === 'erro') {
+    return swal.fire({ icon: 'error', title: 'Ops!', text: mensagem });
+  }
+  return swal.fire({
+    icon: 'success',
+    title: mensagem,
+    timer: 2100,
+    timerProgressBar: true,
+    showConfirmButton: false,
+  });
 }
-export const useToast = () => useContext(ToastContext);
 
-// ------------------------------------------------------- Modal
+/** Modal de confirmação — retorna true se o usuário confirmar. */
+export async function confirmar(titulo, texto = '', textoBotao = 'Sim, confirmar') {
+  const r = await swal.fire({
+    icon: 'question',
+    title: titulo,
+    text: texto,
+    showCancelButton: true,
+    confirmButtonText: textoBotao,
+    cancelButtonText: 'Voltar',
+  });
+  return r.isConfirmed;
+}
+
+/** Modal de carregamento (para operações demoradas, ex.: leitura da foto). */
+export function carregando(titulo, texto = '') {
+  swal.fire({
+    title: titulo,
+    text: texto,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    didOpen: () => Swal.showLoading(),
+  });
+  return { fechar: () => Swal.close(), atualizar: (t) => Swal.update({ text: t }) };
+}
+
+// Compatibilidade com o restante do app: useToast() devolve a função avisar
+export function ToastProvider({ children }) {
+  return children;
+}
+export const useToast = () => avisar;
+
+// ------------------------------------------------------- Modal próprio (formulários)
 export function Modal({ titulo, aoFechar, children }) {
   return (
     <div className="modal-fundo" onClick={(e) => e.target === e.currentTarget && aoFechar()}>
@@ -44,6 +79,49 @@ export function Capa({ url, titulo, className = 'mini-capa' }) {
     );
   }
   return <img className={className} src={url} alt={`Capa de ${titulo || 'livro'}`} onError={() => setFalhou(true)} loading="lazy" />;
+}
+
+// ------------------------------------------------------- Avatar do membro
+export function Avatar({ url, nome, tamanho = 36 }) {
+  const [falhou, setFalhou] = useState(false);
+  const src = url && !url.startsWith('http') && !url.startsWith('data:')
+    ? `${import.meta.env.BASE_URL}${url}`
+    : url;
+  const iniciais = (nome || '?')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('');
+  const estilo = {
+    width: tamanho, height: tamanho, borderRadius: '50%', objectFit: 'cover', flexShrink: 0,
+    background: 'var(--azul-100)', color: 'var(--azul-700)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontWeight: 700, fontSize: tamanho * 0.38, border: '2px solid var(--borda)',
+  };
+  if (!src || falhou) {
+    return <span style={estilo} aria-label={nome}>{iniciais}</span>;
+  }
+  return <img src={src} alt={`Foto de ${nome}`} style={estilo} onError={() => setFalhou(true)} />;
+}
+
+/** Redimensiona uma foto no navegador antes do envio (máx. 480px, JPEG). */
+export function redimensionarFoto(arquivo, max = 480) {
+  return new Promise((resolver, rejeitar) => {
+    const img = new Image();
+    const url = URL.createObjectURL(arquivo);
+    img.onload = () => {
+      const escala = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * escala);
+      canvas.height = Math.round(img.height * escala);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolver(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rejeitar(new Error('Arquivo de imagem inválido.')); };
+    img.src = url;
+  });
 }
 
 // ------------------------------------------------------- Estrelas

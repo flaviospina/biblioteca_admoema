@@ -2,6 +2,45 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, NOMES_PAPEIS } from '../AuthContext';
 import { api, LOGO_URL, formatarData } from '../api';
+import { Avatar, avisar, redimensionarFoto } from './Uteis';
+
+/** Foto do próprio usuário na barra superior — clique para enviar/trocar. */
+function MinhaFoto() {
+  const { usuario, atualizarUsuario } = useAuth();
+  const inputRef = useRef(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async (e) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    setEnviando(true);
+    try {
+      const imagem = await redimensionarFoto(arquivo);
+      const r = await api('auth/foto', { method: 'POST', body: { imagem } });
+      atualizarUsuario({ foto_url: `${r.foto_url}?${Date.now()}` });
+      avisar('Foto de perfil atualizada!');
+    } catch (err) {
+      avisar(err.message, 'erro');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        title="Clique para enviar/trocar sua foto"
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: enviando ? 0.5 : 1 }}
+      >
+        <Avatar url={usuario?.foto_url} nome={usuario?.nome} tamanho={40} />
+      </button>
+      <input ref={inputRef} type="file" accept="image/*" capture="user" hidden onChange={enviar} />
+    </>
+  );
+}
 
 function Sino() {
   const [aberto, setAberto] = useState(false);
@@ -103,6 +142,7 @@ export default function Layout() {
         <header className="topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="botao secundario pequeno botao-menu" onClick={() => setMenuAberto(true)} aria-label="Abrir menu">☰</button>
+            <MinhaFoto />
             <div className="saudacao">
               A paz do Senhor, {usuario?.nome?.split(' ')[0]}!
               <small>{NOMES_PAPEIS[usuario?.papel]} · {usuario?.congregacao}</small>

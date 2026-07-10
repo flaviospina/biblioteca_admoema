@@ -1,0 +1,6 @@
+# Pasta de fotos dos membros — serve apenas imagens, nunca executa código
+<FilesMatch "\.(?i:php|phtml|phar|pl|py|cgi|sh)$">
+    Require all denied
+</FilesMatch>
+RemoveHandler .php .phtml .phar
+RemoveType .php .phtml .phar

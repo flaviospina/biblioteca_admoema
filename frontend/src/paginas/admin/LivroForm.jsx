@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { api, buscarPorTitulo, consultarBibliografia } from '../../api';
-import { carregando, escolherLivro, useToast } from '../../componentes/Uteis';
+import { carregando, confirmarTexto, escolherLivro, useToast } from '../../componentes/Uteis';
 
 // Leitura "esforçada": aceita EAN-13, EAN-8, UPC e códigos comuns em livros
 const HINTS = new Map([
@@ -383,8 +383,9 @@ export default function LivroForm() {
 
   const lerFotoDaCapa = async (arquivo) => {
     const janela = carregando('Lendo a capa do livro…', 'Preparando o reconhecimento de texto (a primeira vez demora um pouco mais).');
+    let consultaLida = '';
     try {
-      const { default: Tesseract } = await import('tesseract.js');
+      const T = await import('tesseract.js');
       const img = await new Promise((res, rej) => {
         const i = new Image();
         i.onload = () => res(i);
@@ -392,39 +393,61 @@ export default function LivroForm() {
         i.src = URL.createObjectURL(arquivo);
       });
 
+      // Modo "texto esparso" (ideal para capas) + lista de caracteres válidos
+      // — elimina a maior parte dos símbolos estranhos
+      const worker = await T.createWorker('por');
+      await worker.setParameters({
+        tessedit_pageseg_mode: T.PSM ? T.PSM.SPARSE_TEXT : '11',
+        tessedit_char_whitelist:
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' +
+          'ÁÀÂÃÉÊÍÓÔÕÚÜÇáàâãéêíóôõúüç0123456789 \'-',
+        preserve_interword_spaces: '1',
+      });
+
       // A foto pode estar deitada: testa as 4 orientações e fica com a leitura
       // de maior confiança (com contraste reforçado para capas decoradas)
       let melhor = { conf: -1, texto: '' };
       const rotacoes = [0, 90, 270, 180];
-      for (let r = 0; r < rotacoes.length; r++) {
-        janela.atualizar(`Reconhecendo o texto… orientação ${r + 1} de ${rotacoes.length}`);
-        const canvas = paraCanvas(img, rotacoes[r], 1400, 'grayscale(1) contrast(1.6)');
-        try {
-          const { data } = await Tesseract.recognize(canvas, 'por');
-          const conf = data.confidence || 0;
-          if (conf > melhor.conf) melhor = { conf, texto: data.text || '' };
-          if (melhor.conf >= 70) break; // leitura boa: não precisa testar o resto
-        } catch { /* tenta a próxima orientação */ }
-      }
-      URL.revokeObjectURL(img.src);
-
-      const consulta = extrairConsulta(melhor.texto);
-      if (melhor.conf < 30 || !consulta) {
-        throw new Error(
-          'Não consegui ler o texto da capa (foto torta, tremida ou com pouco contraste). ' +
-          'Segure o celular reto, de frente para a capa, com boa luz — ou use a foto do código de barras.'
-        );
+      try {
+        for (let r = 0; r < rotacoes.length; r++) {
+          janela.atualizar(`Reconhecendo o texto… orientação ${r + 1} de ${rotacoes.length}`);
+          const canvas = paraCanvas(img, rotacoes[r], 1600, 'grayscale(1) contrast(1.5)');
+          try {
+            const { data } = await worker.recognize(canvas);
+            const conf = data.confidence || 0;
+            if (conf > melhor.conf) melhor = { conf, texto: data.text || '' };
+            if (melhor.conf >= 75) break; // leitura boa: não precisa testar o resto
+          } catch { /* tenta a próxima orientação */ }
+        }
+      } finally {
+        await worker.terminate().catch(() => {});
+        URL.revokeObjectURL(img.src);
       }
 
-      janela.atualizar(`Consultando a internet por "${consulta}"…`);
+      consultaLida = melhor.conf >= 35 ? extrairConsulta(melhor.texto) : '';
+      janela.fechar();
+
+      // O usuário SEMPRE confere/corrige o que foi lido antes de buscar —
+      // capas com fontes decorativas enganam qualquer OCR
+      const consulta = await confirmarTexto(
+        consultaLida ? 'Isto está certo?' : 'Não consegui ler a capa',
+        consultaLida
+          ? 'Li este texto na capa. Corrija se precisar e toque em Buscar.'
+          : 'Digite o título (e autor, se souber) do livro da foto.',
+        consultaLida,
+        'Ex.: Mulheres que amaram a Deus Elizabeth George'
+      );
+      if (!consulta) return;
+
+      const janela2 = carregando('Consultando a internet…', `"${consulta}"`);
       let resultados = await consultarBibliografia({ titulo: consulta });
       if (resultados.length === 0) {
         resultados = (await buscarPorTitulo(consulta)).map((c) => ({ ...c, categorias: [] }));
       }
-      janela.fechar();
+      janela2.fechar();
 
       if (resultados.length === 0) {
-        setErro(`Li na capa "${consulta}", mas nenhum catálogo retornou este livro. Tente a foto do código de barras ou a busca por título/autor.`);
+        setErro(`Busquei por "${consulta}", mas nenhum catálogo retornou este livro. Tente a foto do código de barras ou a busca por título/autor.`);
         return;
       }
       const escolhido = resultados.length === 1

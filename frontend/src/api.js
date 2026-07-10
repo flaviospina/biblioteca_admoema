@@ -85,7 +85,32 @@ export async function buscarPorISBN(isbnBruto) {
   const isbn = String(isbnBruto).replace(/[^0-9Xx]/g, '');
   if (isbn.length < 10) throw new Error('ISBN incompleto.');
 
-  // 1ª fonte: Google Books
+  // 1ª fonte: BrasilAPI (CBL — registro oficial de ISBN do Brasil)
+  try {
+    const r = await fetch(`https://brasilapi.com.br/api/isbn/v1/${isbn}`);
+    if (r.ok) {
+      const j = await r.json();
+      if (j?.title) {
+        return {
+          fonte: 'BrasilAPI/CBL',
+          isbn: j.isbn || isbn,
+          titulo: j.title,
+          subtitulo: j.subtitle || '',
+          autor: (j.authors || []).join(', '),
+          editora: j.publisher || '',
+          ano_publicacao: j.year || '',
+          paginas: j.page_count || '',
+          idioma: 'Português',
+          sinopse: j.synopsis || '',
+          capa_url: j.cover_url || `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`,
+        };
+      }
+    }
+  } catch {
+    // segue para a próxima fonte
+  }
+
+  // 2ª fonte: Google Books
   try {
     const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
     const j = await r.json();
@@ -111,7 +136,7 @@ export async function buscarPorISBN(isbnBruto) {
     // segue para a próxima fonte
   }
 
-  // 2ª fonte: OpenLibrary
+  // 3ª fonte: OpenLibrary
   const r = await fetch(
     `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
   );

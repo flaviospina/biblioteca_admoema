@@ -23,4 +23,11 @@ return [
     // Origens permitidas para CORS (em produção, deixe vazio = mesma origem)
     // Em desenvolvimento local, use: ['http://localhost:5173']
     'cors_origens' => [],
+
+    // Chave (gratuita) da API do Google Books — FORTEMENTE recomendada em
+    // hospedagem compartilhada: sem ela, a cota diária é por IP do servidor
+    // (compartilhado com centenas de sites) e vive esgotada.
+    // Como criar: console.cloud.google.com > criar projeto > ativar
+    // "Books API" > Credenciais > Criar credencial > Chave de API.
+    'google_books_key' => '',
 ];

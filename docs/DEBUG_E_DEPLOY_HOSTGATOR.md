@@ -240,6 +240,34 @@ return [
 
 ---
 
+## A consulta de livros "não encontra nada"? Leia isto
+
+O cadastro consulta 6 fontes: **BrasilAPI/CBL** (registro oficial de ISBN do
+Brasil), **Google Books**, **Mercado Editorial**, **OpenLibrary**,
+**Mercado Livre** e **busca na web** (Amazon/Estante Virtual).
+
+1. **Rode o diagnóstico:** entre como gerente/admin → menu **Sistema** →
+   aba **🩺 Fontes de consulta** → "Testar fontes agora". Ele mostra qual
+   fonte está funcionando a partir do servidor da HostGator.
+
+2. **Google Books "respondeu vazio"?** É quase sempre a **cota diária por
+   IP**: sem chave, o limite é dividido entre TODOS os sites hospedados no
+   mesmo servidor. Solução definitiva (gratuita, ~5 minutos):
+   - Acesse [console.cloud.google.com](https://console.cloud.google.com) com uma conta Google;
+   - Crie um projeto (ex.: "biblioteca-mana");
+   - Menu **APIs e serviços → Biblioteca** → procure **Books API** → **Ativar**;
+   - Menu **APIs e serviços → Credenciais → Criar credenciais → Chave de API**;
+   - Copie a chave e cole no `config.php` do servidor:
+     `'google_books_key' => 'SUA_CHAVE_AQUI',`
+   - Rode o diagnóstico de novo: deve aparecer "(com chave)" e funcionar.
+
+3. **Livro brasileiro sem registro em nenhum catálogo?** Acontece com
+   edições antigas ou de editoras pequenas. Use a busca por título/autor
+   (que inclui Amazon/Mercado Livre) ou preencha manualmente — o número de
+   tombo e todo o resto do sistema funcionam normalmente.
+
+---
+
 ## Resumo de segurança em produção
 
 - [x] Senhas com **bcrypt** e login com **JWT assinado** (HMAC-SHA256)

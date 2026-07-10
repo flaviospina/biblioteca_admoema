@@ -15,8 +15,8 @@
 exigir_papel('bibliotecario');
 
 $acao = $segmentos[1] ?? '';
-if ($METODO !== 'GET' || $acao !== 'consulta') {
-    responder(405, ['erro' => 'Use GET /api/isbn/consulta']);
+if ($METODO !== 'GET' || !in_array($acao, ['consulta', 'diagnostico'], true)) {
+    responder(405, ['erro' => 'Use GET /api/isbn/consulta ou /api/isbn/diagnostico']);
 }
 
 // ---------------------------------------------------------------- HTTP client
@@ -130,9 +130,36 @@ function candidato(array $c): array
 }
 
 // ---------------------------------------------------------------- Fontes
+/**
+ * BrasilAPI — agrega CBL (registro oficial de ISBN do Brasil), Mercado
+ * Editorial, OpenLibrary e Google Books. A melhor fonte para livros nacionais.
+ */
+function fonte_brasilapi(string $isbn): array
+{
+    $j = http_json('https://brasilapi.com.br/api/isbn/v1/' . urlencode($isbn));
+    if (!$j || empty($j['title'])) return [];
+    return [candidato([
+        'isbn'           => $j['isbn'] ?? $isbn,
+        'titulo'         => $j['title'],
+        'subtitulo'      => $j['subtitle'] ?? '',
+        'autor'          => implode(', ', $j['authors'] ?? []),
+        'editora'        => $j['publisher'] ?? '',
+        'ano_publicacao' => $j['year'] ?? '',
+        'paginas'        => $j['page_count'] ?? '',
+        'idioma'         => 'Português',
+        'sinopse'        => $j['synopsis'] ?? '',
+        'capa_url'       => $j['cover_url'] ?? '',
+        'categorias'     => $j['subjects'] ?? [],
+        'fonte'          => 'BrasilAPI/CBL',
+    ])];
+}
+
 function fonte_google_books(string $consulta): array
 {
-    $j = http_json('https://www.googleapis.com/books/v1/volumes?q=' . urlencode($consulta) . '&maxResults=20&printType=books&country=BR');
+    $chave = config()['google_books_key'] ?? '';
+    $j = http_json('https://www.googleapis.com/books/v1/volumes?q=' . urlencode($consulta)
+        . '&maxResults=20&printType=books&country=BR'
+        . ($chave ? '&key=' . urlencode($chave) : ''));
     $itens = [];
     foreach ($j['items'] ?? [] as $item) {
         $v = $item['volumeInfo'] ?? [];
@@ -325,6 +352,43 @@ function fonte_busca_web(string $consulta): array
     return $itens;
 }
 
+// ---------------------------------------------------------------- Diagnóstico
+// GET /api/isbn/diagnostico — testa cada fonte a partir do servidor e mostra
+// o que está funcionando (útil para descobrir bloqueios da hospedagem).
+if ($acao === 'diagnostico') {
+    $isbnTeste = '9788573258804';
+    $temChave  = !empty(config()['google_books_key']);
+    $testes = [
+        'BrasilAPI/CBL'      => fn() => fonte_brasilapi($isbnTeste),
+        'Google Books' . ($temChave ? ' (com chave)' : ' (SEM chave — sujeito a cota do IP)') => fn() => fonte_google_books('isbn:' . $isbnTeste),
+        'Mercado Editorial'  => fn() => fonte_mercado_editorial($isbnTeste),
+        'OpenLibrary'        => fn() => fonte_openlibrary_isbn($isbnTeste),
+        'Mercado Livre'      => fn() => fonte_mercado_livre('biblia de estudo'),
+        'Busca na web'       => fn() => fonte_busca_web('biblia de estudo'),
+    ];
+    $resultado = [];
+    foreach ($testes as $nome => $fn) {
+        $inicio = microtime(true);
+        try {
+            $qtd = count($fn());
+            $resultado[] = [
+                'fonte'  => $nome,
+                'status' => $qtd > 0 ? 'ok' : 'sem_resultados',
+                'resultados' => $qtd,
+                'tempo_ms'   => (int)((microtime(true) - $inicio) * 1000),
+            ];
+        } catch (Throwable $e) {
+            $resultado[] = ['fonte' => $nome, 'status' => 'erro', 'detalhe' => $e->getMessage()];
+        }
+    }
+    responder(200, [
+        'diagnostico' => $resultado,
+        'dica' => $temChave
+            ? 'Chave do Google Books configurada.'
+            : 'Sem chave do Google Books: em hospedagem compartilhada a cota diária do IP costuma estar esgotada. Veja como criar uma chave gratuita no docs/DEBUG_E_DEPLOY_HOSTGATOR.md.',
+    ]);
+}
+
 // ---------------------------------------------------------------- Execução
 $candidatos = [];
 
@@ -338,6 +402,7 @@ if (!empty($_GET['isbn'])) {
     if (strlen($isbn) === 13 && ($i10 = isbn13_para_10($isbn))) $formas[] = $i10;
 
     foreach ($formas as $forma) {
+        $candidatos = array_merge($candidatos, fonte_brasilapi($forma));
         $candidatos = array_merge($candidatos, fonte_google_books('isbn:' . $forma));
         $candidatos = array_merge($candidatos, fonte_mercado_editorial($forma));
     }
@@ -367,22 +432,46 @@ if (!empty($_GET['isbn'])) {
         // Repete sem aspas (mais tolerante a pequenas diferenças de grafia)
         $candidatos = array_merge($candidatos, fonte_google_books(trim("$titulo $autor")));
     }
-    $candidatos = array_merge($candidatos, fonte_openlibrary_busca($titulo, $autor));
+    $candidatos = array_merge($candidatos, array_slice(fonte_openlibrary_busca($titulo, $autor), 0, 5));
     $candidatos = array_merge($candidatos, fonte_mercado_livre(trim("$titulo $autor")));
-    // Complementa com a busca na web (Amazon, Mercado Livre, Estante Virtual)
-    if (count($candidatos) < 6) {
-        $candidatos = array_merge($candidatos, fonte_busca_web(trim("$titulo $autor")));
-    }
+    // Sempre complementa com a busca na web (Amazon, Mercado Livre, Estante Virtual)
+    $candidatos = array_merge($candidatos, fonte_busca_web(trim("$titulo $autor")));
 } else {
     responder(422, ['erro' => 'Informe isbn OU titulo/autor.']);
 }
 
-// ---------------------------------------------------------------- Deduplicação
-// Prioriza registros mais completos; agrupa por ISBN (ou título+editora+ano)
-usort($candidatos, function ($a, $b) {
+// ---------------------------------------------------------------- Relevância e limpeza
+// Descarta títulos em alfabetos não latinos (grego, cirílico etc.) — edições
+// estrangeiras que só confundem o acervo de uma igreja brasileira
+$candidatos = array_values(array_filter($candidatos, function ($c) {
+    return !preg_match('/[\p{Greek}\p{Cyrillic}\p{Han}\p{Arabic}\p{Hebrew}\p{Hangul}\p{Hiragana}\p{Katakana}\p{Thai}]/u', $c['titulo'] . $c['autor']);
+}));
+
+// Ordena por relevância (quantas palavras da busca aparecem no resultado)
+// e, em empate, pelo registro mais completo
+$termosBusca = [];
+foreach ([$_GET['titulo'] ?? '', $_GET['autor'] ?? ''] as $campoBusca) {
+    foreach (preg_split('/\s+/', $campoBusca) as $t) {
+        $t = mb_strtolower(trim($t));
+        if (mb_strlen($t) >= 3) $termosBusca[] = $t;
+    }
+}
+$semAcento = fn($s) => strtr(mb_strtolower($s),
+    ['á'=>'a','à'=>'a','â'=>'a','ã'=>'a','é'=>'e','ê'=>'e','í'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ú'=>'u','ç'=>'c']);
+usort($candidatos, function ($a, $b) use ($termosBusca, $semAcento) {
+    $relevancia = function ($c) use ($termosBusca, $semAcento) {
+        if (!$termosBusca) return 0;
+        $alvo = $semAcento($c['titulo'] . ' ' . $c['subtitulo'] . ' ' . $c['autor']);
+        $acertos = 0;
+        foreach ($termosBusca as $t) {
+            if (str_contains($alvo, $semAcento($t))) $acertos++;
+        }
+        return $acertos;
+    };
     $nota = fn($c) => ($c['sinopse'] ? 2 : 0) + ($c['capa_url'] ? 2 : 0) + ($c['editora'] ? 1 : 0)
-                    + ($c['paginas'] ? 1 : 0) + ($c['categorias'] ? 1 : 0) + ($c['isbn'] ? 1 : 0);
-    return $nota($b) <=> $nota($a);
+                    + ($c['paginas'] ? 1 : 0) + ($c['categorias'] ? 1 : 0) + ($c['isbn'] ? 1 : 0)
+                    + ($c['idioma'] === 'Português' ? 1 : 0);
+    return [$relevancia($b), $nota($b)] <=> [$relevancia($a), $nota($a)];
 });
 $unicos = [];
 foreach ($candidatos as $c) {

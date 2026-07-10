@@ -35,6 +35,22 @@ export async function confirmar(titulo, texto = '', textoBotao = 'Sim, confirmar
   return r.isConfirmed;
 }
 
+/** Modal com campo de texto editável — retorna o texto confirmado ou null. */
+export async function confirmarTexto(titulo, texto, valorInicial = '', placeholder = '') {
+  const r = await swal.fire({
+    title: titulo,
+    text: texto,
+    input: 'text',
+    inputValue: valorInicial,
+    inputPlaceholder: placeholder,
+    showCancelButton: true,
+    confirmButtonText: '🔎 Buscar',
+    cancelButtonText: 'Cancelar',
+    inputValidator: (v) => (!v || v.trim().length < 3 ? 'Digite ao menos 3 letras.' : undefined),
+  });
+  return r.isConfirmed ? r.value.trim() : null;
+}
+
 /** Modal de carregamento (para operações demoradas, ex.: leitura da foto). */
 export function carregando(titulo, texto = '') {
   swal.fire({

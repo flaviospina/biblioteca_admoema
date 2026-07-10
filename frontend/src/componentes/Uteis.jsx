@@ -64,18 +64,23 @@ export function escolherLivro(candidatos, titulo = 'Encontrei mais de uma opçã
         : `<span class="sem-capa">📖</span>`;
       const detalhes = [c.editora, c.ano_publicacao, c.edicao ? `${c.edicao}ª ed.` : '', c.isbn]
         .filter(Boolean).join(' · ');
+      const linkLoja = c.link
+        ? `<a class="link-loja" href="${c.link}" target="_blank" rel="noreferrer">abrir página ↗</a>`
+        : '';
       opcao.innerHTML = `
         ${capa}
         <span class="texto">
           <strong>${c.titulo}</strong>
           <small>${c.autor || 'Autor não informado'}</small>
           <small class="detalhes">${detalhes}</small>
-          <small class="fonte">${c.fonte || ''}</small>
+          <small class="fonte">${c.fonte || ''} ${linkLoja}</small>
         </span>`;
       opcao.addEventListener('click', () => {
         Swal.close();
         resolver(candidatos[i]);
       });
+      // O link da loja abre em nova aba sem selecionar a opção
+      opcao.querySelector('.link-loja')?.addEventListener('click', (ev) => ev.stopPropagation());
       caixa.appendChild(opcao);
     });
 

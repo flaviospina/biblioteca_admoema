@@ -105,7 +105,7 @@ export default function LivroForm() {
       const novo = {
         ...f,
         ...Object.fromEntries(
-          Object.entries(c).filter(([k, v]) => k !== 'fonte' && k !== 'categorias' && v !== '' && v != null)
+          Object.entries(c).filter(([k, v]) => !['fonte', 'categorias', 'link'].includes(k) && v !== '' && v != null)
         ),
       };
       if (!novo.categoria_id) {
@@ -121,7 +121,7 @@ export default function LivroForm() {
   const preencherPorISBN = async (isbn, { autoEnviar = false } = {}) => {
     setBuscando(true);
     setErro('');
-    const janela = carregando('Consultando o código…', `Pesquisando ${isbn} no Google Books, Mercado Editorial e OpenLibrary.`);
+    const janela = carregando('Consultando o código…', `Pesquisando ${isbn} no Google Books, Mercado Editorial, OpenLibrary, Mercado Livre e na web.`);
     try {
       const encontrados = await consultarBibliografia({ isbn });
       janela.fechar();
@@ -340,37 +340,91 @@ export default function LivroForm() {
   };
 
   // ---------------------------------------------------------- Foto da CAPA (OCR + busca)
+  /** Desenha a imagem num canvas com rotação, limite de tamanho e filtro de contraste. */
+  const paraCanvas = (img, rot = 0, maxLado = 1400, filtro = '') => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const girado = rot === 90 || rot === 270;
+    const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+    const w = Math.round(img.width * escala);
+    const h = Math.round(img.height * escala);
+    canvas.width = girado ? h : w;
+    canvas.height = girado ? w : h;
+    if (filtro) ctx.filter = filtro;
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((rot * Math.PI) / 180);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    return canvas;
+  };
+
+  /** Extrai as linhas mais prováveis do título/autor, descartando ruído do OCR. */
+  const extrairConsulta = (texto) => {
+    const limpar = (linha) =>
+      linha
+        .split(/\s+/)
+        .map((p) => p.replace(/[^\p{L}\p{N}'-]/gu, ''))
+        .filter(
+          (p) =>
+            p.length >= 3 &&
+            /[aeiouáéíóúâêôãõy]/i.test(p) && // palavra sem vogal = ruído
+            !/(.)\1\1/.test(p) // três letras repetidas seguidas = ruído
+        );
+    const linhas = texto
+      .split('\n')
+      .map((l, i) => ({ i, tokens: limpar(l) }))
+      .filter((l) => l.tokens.length > 0);
+    // As 2 linhas com mais texto tendem a ser o título e o autor
+    const melhores = [...linhas]
+      .sort((a, b) => b.tokens.join('').length - a.tokens.join('').length)
+      .slice(0, 2)
+      .sort((a, b) => a.i - b.i);
+    return melhores.flatMap((l) => l.tokens).slice(0, 10).join(' ');
+  };
+
   const lerFotoDaCapa = async (arquivo) => {
     const janela = carregando('Lendo a capa do livro…', 'Preparando o reconhecimento de texto (a primeira vez demora um pouco mais).');
     try {
       const { default: Tesseract } = await import('tesseract.js');
-      const { data } = await Tesseract.recognize(arquivo, 'por', {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            janela.atualizar(`Reconhecendo o texto da capa… ${Math.round(m.progress * 100)}%`);
-          }
-        },
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error('Não foi possível abrir a imagem.'));
+        i.src = URL.createObjectURL(arquivo);
       });
 
-      // Extrai as palavras mais prováveis do título (ignora ruído do OCR)
-      const palavras = (data.text || '')
-        .split(/\s+/)
-        .map((p) => p.replace(/[^\p{L}\p{N}'-]/gu, ''))
-        .filter((p) => p.length >= 3)
-        .slice(0, 10);
-      if (palavras.length === 0) {
-        throw new Error('Não consegui ler texto na capa. Tente uma foto mais próxima, reta e bem iluminada.');
+      // A foto pode estar deitada: testa as 4 orientações e fica com a leitura
+      // de maior confiança (com contraste reforçado para capas decoradas)
+      let melhor = { conf: -1, texto: '' };
+      const rotacoes = [0, 90, 270, 180];
+      for (let r = 0; r < rotacoes.length; r++) {
+        janela.atualizar(`Reconhecendo o texto… orientação ${r + 1} de ${rotacoes.length}`);
+        const canvas = paraCanvas(img, rotacoes[r], 1400, 'grayscale(1) contrast(1.6)');
+        try {
+          const { data } = await Tesseract.recognize(canvas, 'por');
+          const conf = data.confidence || 0;
+          if (conf > melhor.conf) melhor = { conf, texto: data.text || '' };
+          if (melhor.conf >= 70) break; // leitura boa: não precisa testar o resto
+        } catch { /* tenta a próxima orientação */ }
+      }
+      URL.revokeObjectURL(img.src);
+
+      const consulta = extrairConsulta(melhor.texto);
+      if (melhor.conf < 30 || !consulta) {
+        throw new Error(
+          'Não consegui ler o texto da capa (foto torta, tremida ou com pouco contraste). ' +
+          'Segure o celular reto, de frente para a capa, com boa luz — ou use a foto do código de barras.'
+        );
       }
 
-      janela.atualizar('Consultando a internet…');
-      let resultados = await consultarBibliografia({ titulo: palavras.join(' ') });
+      janela.atualizar(`Consultando a internet por "${consulta}"…`);
+      let resultados = await consultarBibliografia({ titulo: consulta });
       if (resultados.length === 0) {
-        resultados = (await buscarPorTitulo(palavras.join(' '))).map((c) => ({ ...c, categorias: [] }));
+        resultados = (await buscarPorTitulo(consulta)).map((c) => ({ ...c, categorias: [] }));
       }
       janela.fechar();
 
       if (resultados.length === 0) {
-        setErro(`Nenhum livro encontrado para "${palavras.join(' ')}". Tente a foto do código de barras ou digite o ISBN.`);
+        setErro(`Li na capa "${consulta}", mas nenhum catálogo retornou este livro. Tente a foto do código de barras ou a busca por título/autor.`);
         return;
       }
       const escolhido = resultados.length === 1

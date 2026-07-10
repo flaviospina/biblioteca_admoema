@@ -325,3 +325,4 @@ tbody tr:hover { background: #f8fafd; }
 .swal-livro-opcao .texto small { color: var(--texto-2); font-size: 0.76rem; }
 .swal-livro-opcao .texto .detalhes { color: var(--texto-3); }
 .swal-livro-opcao .texto .fonte { color: var(--dourado-600); font-weight: 600; font-size: 0.68rem; }
+.swal-livro-opcao .link-loja { color: var(--azul-600); font-weight: 600; margin-left: 6px; }

@@ -69,9 +69,11 @@ export default function Livro() {
   return (
     <>
       <Link to="/" style={{ fontSize: '0.85rem' }}>← Voltar ao catálogo</Link>
-      <div className="card" style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'minmax(140px, 200px) 1fr', gap: 24 }}>
-        <div>
-          <Capa url={livro.capa_url} titulo={livro.titulo} className="scanner-video" />
+      <div className="card livro-cabecalho" style={{ marginTop: 12 }}>
+        <div className="livro-capa">
+          {livro.capa_url
+            ? <Capa url={livro.capa_url} titulo={livro.titulo} className="" />
+            : <span className="sem">📖</span>}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>

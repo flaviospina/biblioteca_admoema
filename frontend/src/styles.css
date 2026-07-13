@@ -178,7 +178,7 @@ tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f8fafd; }
 
 /* Grade do catálogo */
-.grade-livros { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 18px; }
+.grade-livros { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; }
 .card-livro {
   background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio);
   overflow: hidden; box-shadow: var(--sombra); display: flex; flex-direction: column;
@@ -190,9 +190,12 @@ tbody tr:hover { background: #f8fafd; }
 .card-livro .capa .sem-capa { font-size: 2.2rem; opacity: 0.5; }
 .card-livro .info { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .card-livro .titulo { font-weight: 600; font-size: 0.88rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.card-livro .autor { font-size: 0.76rem; color: var(--texto-3); }
-.card-livro .rodape { margin-top: auto; display: flex; justify-content: space-between; align-items: center; padding-top: 6px; }
+.card-livro .autor { font-size: 0.76rem; color: var(--texto-3); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.card-livro .rodape { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 6px; padding-top: 8px; }
+.card-livro .rodape .chip { max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .selo-disponibilidade { position: absolute; top: 8px; left: 8px; }
+.selo-disponibilidade .chip { font-size: 0.68rem; padding: 3px 8px; box-shadow: 0 1px 4px rgba(15,36,64,0.15); }
+.selo-rodape { display: none; }
 
 /* Estrelas */
 .estrelas { color: var(--dourado-600); font-size: 0.9rem; letter-spacing: 1px; }
@@ -293,6 +296,35 @@ tbody tr:hover { background: #f8fafd; }
   .botao-menu { display: inline-flex; }
   .pagina { padding: 16px; }
   .fundo-menu { position: fixed; inset: 0; background: rgba(15,36,64,0.4); z-index: 35; }
+}
+
+/* Cabeçalho da página de detalhe do livro */
+.livro-cabecalho { display: grid; grid-template-columns: 190px 1fr; gap: 24px; align-items: start; }
+.livro-capa { width: 100%; aspect-ratio: 2/3; border-radius: 12px; overflow: hidden; background: linear-gradient(160deg, var(--azul-100), var(--azul-50)); display: flex; align-items: center; justify-content: center; }
+.livro-capa img { width: 100%; height: 100%; object-fit: cover; }
+.livro-capa .sem { font-size: 3rem; opacity: 0.5; }
+
+/* ---------- Ajustes de celular ---------- */
+@media (max-width: 640px) {
+  /* Detalhe do livro: empilha e mantém a capa pequena (não ocupa a tela toda) */
+  .livro-cabecalho { grid-template-columns: 1fr; gap: 16px; }
+  .livro-capa { max-width: 150px; margin: 0 auto; }
+  .livro-cabecalho h1 { font-size: 1.5rem; }
+}
+@media (max-width: 560px) {
+  /* Catálogo: card horizontal (capa pequena à esquerda, dados à direita) */
+  .grade-livros { grid-template-columns: 1fr; gap: 12px; }
+  .card-livro { flex-direction: row; }
+  .card-livro .capa { width: 84px; flex-shrink: 0; aspect-ratio: 2/3; }
+  .card-livro .capa .sem-capa { font-size: 1.6rem; }
+  .card-livro .info { padding: 12px 14px; gap: 5px; justify-content: center; }
+  .card-livro .titulo { -webkit-line-clamp: 2; font-size: 0.95rem; }
+  .card-livro .autor { font-size: 0.82rem; }
+  .card-livro .rodape { padding-top: 2px; gap: 8px; flex-wrap: wrap; }
+  .card-livro .rodape .chip { max-width: none; }
+  /* No celular, a disponibilidade vai para o rodapé (não sobre a capa pequena) */
+  .selo-disponibilidade { display: none; }
+  .selo-rodape { display: block; }
 }
 
 .vazio { text-align: center; padding: 44px 20px; color: var(--texto-3); }

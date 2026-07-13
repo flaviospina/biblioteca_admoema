@@ -113,6 +113,7 @@ export default function Catalogo() {
               <div className="info">
                 <div className="titulo">{l.titulo}</div>
                 <div className="autor">{l.autor}</div>
+                <div className="selo-rodape"><SeloDisponibilidade disponiveis={l.disponiveis} /></div>
                 <div className="rodape">
                   <Estrelas nota={l.nota_media} />
                   {l.categoria_nome && <span className="chip neutro">{l.categoria_nome}</span>}

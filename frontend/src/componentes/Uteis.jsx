@@ -145,7 +145,9 @@ export function Capa({ url, titulo, className = 'mini-capa' }) {
       </div>
     );
   }
-  return <img className={className} src={url} alt={`Capa de ${titulo || 'livro'}`} onError={() => setFalhou(true)} loading="lazy" />;
+  // Capas enviadas ficam em api/uploads/ (caminho relativo) — prefixa com o BASE_URL
+  const src = /^(https?:|data:|\/)/.test(url) ? url : `${import.meta.env.BASE_URL}${url}`;
+  return <img className={className} src={src} alt={`Capa de ${titulo || 'livro'}`} onError={() => setFalhou(true)} loading="lazy" />;
 }
 
 // ------------------------------------------------------- Avatar do membro

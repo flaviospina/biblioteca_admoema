@@ -1,7 +1,16 @@
 <?php
 /** Rotas: /api/livros — catálogo e cadastro do acervo */
 
-$id = isset($segmentos[1]) ? (int)$segmentos[1] : null;
+// POST /api/livros/capa — envia a foto da capa (tirada pelo celular) e devolve a URL
+if ($METODO === 'POST' && ($segmentos[1] ?? '') === 'capa') {
+    $u = exigir_papel('bibliotecario');
+    $dados = entrada();
+    $url = salvar_capa_livro($dados['imagem'] ?? '');
+    auditar($u['id'], 'capa_enviada', 'livros', null, $url);
+    responder(200, ['capa_url' => $url]);
+}
+
+$id = isset($segmentos[1]) && is_numeric($segmentos[1]) ? (int)$segmentos[1] : null;
 
 // GET /api/livros?busca=&categoria=&pagina=&destaque=1&disponiveis=1
 if ($METODO === 'GET' && !$id) {

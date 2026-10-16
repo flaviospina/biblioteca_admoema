@@ -3,7 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { api, buscarPorTitulo, consultarBibliografia } from '../../api';
-import { carregando, confirmarTexto, escolherLivro, useToast } from '../../componentes/Uteis';
+import { carregando, confirmarTexto, escolherLivro, redimensionarFoto, useToast } from '../../componentes/Uteis';
+
+// Resolve o endereço da capa: imagens enviadas ficam em api/uploads/ (caminho relativo)
+const capaPreview = (url) =>
+  url && !/^(https?:|data:)/.test(url) ? `${import.meta.env.BASE_URL}${url}` : url;
 
 // Leitura "esforçada": aceita EAN-13, EAN-8, UPC e códigos comuns em livros
 const HINTS = new Map([
@@ -46,6 +50,29 @@ export default function LivroForm() {
   const fotoRef = useRef(null);
   const fotoModoRef = useRef('codigo'); // 'codigo' | 'capa'
   const [scannerLigado, setScannerLigado] = useState(false);
+
+  // Upload da foto da capa (cadastro e edição)
+  const capaFotoRef = useRef(null);
+  const [enviandoCapa, setEnviandoCapa] = useState(false);
+  const [capaQuebrada, setCapaQuebrada] = useState(false);
+  const enviarFotoCapa = async (e) => {
+    const arquivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    setEnviandoCapa(true);
+    setErro('');
+    try {
+      const imagem = await redimensionarFoto(arquivo, 900); // capa em boa resolução
+      const r = await api('livros/capa', { method: 'POST', body: { imagem } });
+      setCapaQuebrada(false);
+      setForm((f) => ({ ...f, capa_url: r.capa_url }));
+      avisar('Foto da capa enviada!');
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setEnviandoCapa(false);
+    }
+  };
 
   useEffect(() => {
     api('categorias').then((r) => setCategorias(r.categorias)).catch(() => {});
@@ -178,25 +205,18 @@ export default function LivroForm() {
     }
   };
 
-  // ---------------------------------------------------------- Envio automático
+  // ---------------------------------------------------------- Pós-captura: revisar e cadastrar
+  // Depois de preencher pela câmera/foto, levamos a usuária à seção de
+  // exemplares (Origem) para conferir e cadastrar — sem envio automático,
+  // para que ela possa informar a origem/quantidade.
   const iniciarContagem = () => {
-    cancelarContagem();
-    let restante = 5;
-    setContagem(restante);
-    contagemRef.current = setInterval(() => {
-      restante -= 1;
-      if (restante <= 0) {
-        cancelarContagem();
-        document.getElementById('form-livro')?.requestSubmit();
-      } else {
-        setContagem(restante);
-      }
-    }, 1000);
+    setContagem(true);
+    setTimeout(() => {
+      document.getElementById('secao-exemplares')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
   };
 
   const cancelarContagem = () => {
-    if (contagemRef.current) clearInterval(contagemRef.current);
-    contagemRef.current = null;
     setContagem(null);
   };
 
@@ -591,8 +611,8 @@ export default function LivroForm() {
 
       {contagem !== null && (
         <div className="contagem-envio">
-          <span>🚀 Enviando cadastro automaticamente em {contagem}s… Confira os dados abaixo.</span>
-          <button type="button" className="botao secundario pequeno" onClick={cancelarContagem}>Pausar para revisar</button>
+          <span>✓ Dados preenchidos! Role até <b>Exemplares físicos</b>, confira a <b>Origem</b> e toque em <b>Cadastrar no acervo</b>.</span>
+          <button type="button" className="botao secundario pequeno" onClick={cancelarContagem}>Ok</button>
         </div>
       )}
 
@@ -653,8 +673,27 @@ export default function LivroForm() {
             <input name="tags" value={form.tags} onChange={mudar} placeholder="oração, jejum, avivamento" />
           </div>
           <div className="campo" style={{ gridColumn: '1 / -1' }}>
-            <label>URL da capa</label>
-            <input name="capa_url" value={form.capa_url} onChange={mudar} placeholder="https://…" />
+            <label>Capa do livro</label>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {form.capa_url && !capaQuebrada
+                ? <img src={capaPreview(form.capa_url)} alt="Capa" style={{ width: 90, height: 135, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--borda)', background: 'var(--azul-50)' }} onError={() => setCapaQuebrada(true)} />
+                : <div style={{ width: 90, height: 135, borderRadius: 8, border: '1px dashed var(--borda)', background: 'var(--azul-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', color: 'var(--texto-3)' }}>📖</div>}
+              <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <button type="button" className="botao secundario pequeno" onClick={() => capaFotoRef.current?.click()} disabled={enviandoCapa}>
+                    {enviandoCapa ? 'Enviando…' : '📷 Tirar/enviar foto da capa'}
+                  </button>
+                  {form.capa_url && (
+                    <button type="button" className="botao fantasma pequeno" onClick={() => setForm((f) => ({ ...f, capa_url: '' }))}>Remover capa</button>
+                  )}
+                  <input ref={capaFotoRef} type="file" accept="image/*" capture="environment" hidden onChange={enviarFotoCapa} />
+                </div>
+                <input name="capa_url" value={form.capa_url} onChange={(e) => { setCapaQuebrada(false); mudar(e); }} placeholder="…ou cole o endereço (URL) de uma imagem" style={{ width: '100%' }} />
+                <div style={{ fontSize: '0.74rem', color: 'var(--texto-3)', marginTop: 4 }}>
+                  Tire a foto da capa do livro ou cole o endereço de uma imagem da internet.
+                </div>
+              </div>
+            </div>
           </div>
           <div className="campo" style={{ gridColumn: '1 / -1' }}>
             <label>Sinopse</label>
@@ -662,17 +701,13 @@ export default function LivroForm() {
           </div>
         </div>
 
-        {form.capa_url && (
-          <img src={form.capa_url} alt="Pré-visualização da capa" style={{ width: 90, borderRadius: 8, marginBottom: 14 }} onError={(e) => { e.target.style.display = 'none'; }} />
-        )}
-
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 16, fontSize: '0.88rem', fontWeight: 600 }}>
           <input type="checkbox" name="destaque" checked={form.destaque} onChange={mudar} />
           ⭐ Destacar este livro no catálogo
         </label>
 
         {!editando && (
-          <>
+          <div id="secao-exemplares">
             <h2>Exemplares físicos</h2>
             <div className="grade-form">
               <div className="campo">
@@ -696,7 +731,7 @@ export default function LivroForm() {
             <p style={{ fontSize: '0.78rem', color: 'var(--texto-3)' }}>
               O número de tombo (etiqueta) de cada exemplar é gerado automaticamente no formato MN-00000-00.
             </p>
-          </>
+          </div>
         )}
 
         <button className="botao" disabled={salvando} style={{ minWidth: 200 }}>

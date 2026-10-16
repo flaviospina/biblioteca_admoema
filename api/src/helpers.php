@@ -190,6 +190,36 @@ function salvar_foto_usuario(int $usuarioId, string $dataUrl): string
     return $url;
 }
 
+// ---------------------------------------------------------------- Foto de capa de livro
+/**
+ * Recebe uma imagem em data-URL (base64), valida, grava em api/uploads/capas/
+ * e devolve o caminho relativo. Usada para a foto da capa tirada pelo celular.
+ */
+function salvar_capa_livro(string $dataUrl): string
+{
+    if (!preg_match('#^data:image/(jpeg|jpg|png|webp);base64,#i', $dataUrl, $m)) {
+        responder(422, ['erro' => 'Envie a imagem em formato JPEG, PNG ou WebP.']);
+    }
+    $binario = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1), true);
+    if ($binario === false || strlen($binario) > 4 * 1024 * 1024) {
+        responder(422, ['erro' => 'Imagem inválida ou maior que 4 MB.']);
+    }
+    if (@getimagesizefromstring($binario) === false) {
+        responder(422, ['erro' => 'O arquivo enviado não é uma imagem válida.']);
+    }
+
+    $dir = __DIR__ . '/../uploads/capas';
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        responder(500, ['erro' => 'Não foi possível criar a pasta de uploads no servidor.']);
+    }
+    $ext  = strtolower($m[1]) === 'png' ? 'png' : (strtolower($m[1]) === 'webp' ? 'webp' : 'jpg');
+    $nome = 'capa_' . date('YmdHis') . '_' . substr(bin2hex(random_bytes(4)), 0, 6) . ".$ext";
+    if (file_put_contents("$dir/$nome", $binario) === false) {
+        responder(500, ['erro' => 'Falha ao gravar a imagem no servidor (permissão da pasta uploads).']);
+    }
+    return "api/uploads/capas/$nome";
+}
+
 // ---------------------------------------------------------------- Configurações do sistema
 function config_sistema(string $chave, string $padrao = ''): string
 {

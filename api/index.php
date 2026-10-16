@@ -37,6 +37,24 @@ $recursosValidos = [
     'notificacoes', 'configuracoes', 'auditoria', 'minha-estante', 'isbn',
 ];
 
+// Arquivos enviados (fotos de perfil, capas) são servidos diretamente.
+// Em produção o Apache já faz isso pelo .htaccess; isto cobre também o
+// servidor embutido do PHP (desenvolvimento) e evita 404 nas imagens.
+if ($recurso === 'uploads') {
+    $caminho = realpath(__DIR__ . '/uploads/' . str_replace('..', '', substr($rota, strlen('uploads/'))));
+    $base = realpath(__DIR__ . '/uploads');
+    if ($caminho && $base && str_starts_with($caminho, $base) && is_file($caminho)) {
+        $mime = [
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp',
+        ][strtolower(pathinfo($caminho, PATHINFO_EXTENSION))] ?? 'application/octet-stream';
+        header("Content-Type: $mime");
+        header('Cache-Control: public, max-age=86400');
+        readfile($caminho);
+        exit;
+    }
+    responder(404, ['erro' => 'Arquivo não encontrado.']);
+}
+
 if (!in_array($recurso, $recursosValidos, true)) {
     responder(404, ['erro' => "Recurso desconhecido: '$recurso'"]);
 }
